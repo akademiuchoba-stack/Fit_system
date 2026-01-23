@@ -6,7 +6,6 @@ function App() {
   const [user, setUser] = useState(null); 
   const [token, setToken] = useState(localStorage.getItem('token')); 
   const [authMode, setAuthMode] = useState('login'); 
-  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -18,30 +17,26 @@ function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminData, setAdminData] = useState(null);
 
-  // --- НОВОЕ: ПОДГРУЗКА ДАННЫХ ПРИ ОБНОВЛЕНИИ СТРАНИЦЫ ---
   useEffect(() => {
     if (token && !user) {
-        // Если есть токен, но нет пользователя - идем на сервер
         fetch(`http://${IP}:5000/api/auth/me`, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(res => res.json())
         .then(data => {
-            if (data.error) {
-                // Если токен протух - выходим
-                logout();
-            } else {
+            if (data.error) { logout(); } 
+            else {
                 setUser(data.user);
                 setMeasurements(data.user.measurements || { waist: 0, hip: 0, leg_length: 0, height: 0 });
-                setIsModel(data.user.isModel);
+                // ВОТ ТУТ МЫ ТЕПЕРЬ ПОЛУЧАЕМ СТАТУС ГАЛОЧКИ ИЗ БАЗЫ
+                setIsModel(data.user.isModel || false);
             }
         })
         .catch(() => console.error("Ошибка загрузки профиля"));
     }
   }, [token]);
 
-  // АВТОРИЗАЦИЯ
   const handleAuth = async () => {
     const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
     try {
@@ -51,14 +46,13 @@ function App() {
             body: JSON.stringify({ email, password, measurements: authMode === 'register' ? measurements : undefined })
         });
         const data = await res.json();
-        
-        if (data.error) {
-            alert(data.error);
-        } else {
+        if (data.error) { alert(data.error); } 
+        else {
             localStorage.setItem('token', data.token);
             setToken(data.token);
             setUser(data.user);
             if (data.user.measurements) setMeasurements(data.user.measurements);
+            setIsModel(data.user.isModel || false);
         }
     } catch (e) { alert("Ошибка сервера"); }
   };
@@ -74,7 +68,6 @@ function App() {
     const newVal = Number(val);
     const newMeasurements = { ...measurements, [key]: newVal };
     setMeasurements(newMeasurements);
-    
     if (token) {
         await fetch(`http://${IP}:5000/api/user/update`, {
             method: 'POST',
@@ -100,15 +93,25 @@ function App() {
     setLoading(false);
   };
 
+  // ИСПРАВЛЕННАЯ ФУНКЦИЯ
   const handleBecomeModel = async (e) => {
     const checked = e.target.checked;
     setIsModel(checked);
-    if (checked) {
-        await fetch(`http://${IP}:5000/api/become-model`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ measurements })
-        });
-        alert("Спасибо! Вы добавлены в базу.");
+    if (token) {
+        try {
+            await fetch(`http://${IP}:5000/api/become-model`, {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, measurements, isModel: checked })
+            });
+            if (checked) alert("Спасибо! Статус модели сохранен.");
+        } catch (error) {
+            alert("Ошибка сохранения");
+            setIsModel(!checked);
+        }
+    } else {
+        alert("Войдите в аккаунт");
+        setIsModel(false);
     }
   };
 
@@ -175,7 +178,6 @@ function App() {
         </div>
         <button onClick={openAdmin} style={{ marginTop: 'auto', background: 'none', border: 'none', color: '#9ca3af' }}>🔒 Admin</button>
       </div>
-
       <div className="main-content">
         <div className="search-bar">
           <input type="text" className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} />

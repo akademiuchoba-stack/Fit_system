@@ -3,16 +3,13 @@ import { useState, useEffect } from 'react'
 const IP = "109.73.193.225"; 
 
 function App() {
-  // === СОСТОЯНИЕ АВТОРИЗАЦИИ ===
-  const [user, setUser] = useState(null); // Данные пользователя
-  const [token, setToken] = useState(localStorage.getItem('token')); // Токен
-  const [authMode, setAuthMode] = useState('login'); // 'login' или 'register'
+  const [user, setUser] = useState(null); 
+  const [token, setToken] = useState(localStorage.getItem('token')); 
+  const [authMode, setAuthMode] = useState('login'); 
   
-  // Поля для формы входа
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Основные состояния приложения
   const [query, setQuery] = useState("джинсы");
   const [measurements, setMeasurements] = useState({ waist: 0, hip: 0, leg_length: 0, height: 0 });
   const [results, setResults] = useState([]);
@@ -21,7 +18,30 @@ function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminData, setAdminData] = useState(null);
 
-  // 1. АВТОРИЗАЦИЯ
+  // --- НОВОЕ: ПОДГРУЗКА ДАННЫХ ПРИ ОБНОВЛЕНИИ СТРАНИЦЫ ---
+  useEffect(() => {
+    if (token && !user) {
+        // Если есть токен, но нет пользователя - идем на сервер
+        fetch(`http://${IP}:5000/api/auth/me`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                // Если токен протух - выходим
+                logout();
+            } else {
+                setUser(data.user);
+                setMeasurements(data.user.measurements || { waist: 0, hip: 0, leg_length: 0, height: 0 });
+                setIsModel(data.user.isModel);
+            }
+        })
+        .catch(() => console.error("Ошибка загрузки профиля"));
+    }
+  }, [token]);
+
+  // АВТОРИЗАЦИЯ
   const handleAuth = async () => {
     const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
     try {
@@ -35,7 +55,6 @@ function App() {
         if (data.error) {
             alert(data.error);
         } else {
-            // УСПЕХ!
             localStorage.setItem('token', data.token);
             setToken(data.token);
             setUser(data.user);
@@ -51,13 +70,11 @@ function App() {
     setResults([]);
   };
 
-  // 2. ОБНОВЛЕНИЕ РАЗМЕРОВ В ПРОФИЛЕ
   const updateMeasure = async (key, val) => {
     const newVal = Number(val);
     const newMeasurements = { ...measurements, [key]: newVal };
     setMeasurements(newMeasurements);
     
-    // Сохраняем на сервере
     if (token) {
         await fetch(`http://${IP}:5000/api/user/update`, {
             method: 'POST',
@@ -67,7 +84,6 @@ function App() {
     }
   };
 
-  // 3. ПОИСК
   const handleSearch = async () => {
     if (!measurements.waist) return alert("Пожалуйста, заполните размеры слева!");
     setLoading(true);
@@ -84,7 +100,6 @@ function App() {
     setLoading(false);
   };
 
-  // Логика "Стать моделью"
   const handleBecomeModel = async (e) => {
     const checked = e.target.checked;
     setIsModel(checked);
@@ -97,7 +112,6 @@ function App() {
     }
   };
 
-  // Админка
   const openAdmin = async () => {
     if (prompt("Пароль:") === "1234") {
         const res = await fetch(`http://${IP}:5000/api/admin/stats`);
@@ -106,7 +120,6 @@ function App() {
     } else alert("Неверно");
   };
 
-  // === ЭКРАН ВХОДА (Если нет токена) ===
   if (!token) {
       return (
           <div className="auth-container">
@@ -114,18 +127,13 @@ function App() {
                   <h2 className="auth-title">{authMode === 'login' ? 'Вход в Fit System' : 'Регистрация'}</h2>
                   <input className="auth-input" type="email" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
                   <input className="auth-input" type="password" placeholder="Пароль" value={password} onChange={e=>setPassword(e.target.value)} />
-                  
                   {authMode === 'register' && (
                       <div style={{textAlign:'left', marginBottom:'20px'}}>
-                          <small>Укажите базовые размеры (можно поменять позже):</small>
+                          <small>Укажите базовые размеры:</small>
                           <input className="auth-input" style={{marginTop:'5px'}} type="number" placeholder="Талия (см)" value={measurements.waist || ''} onChange={e=>setMeasurements({...measurements, waist: Number(e.target.value)})} />
                       </div>
                   )}
-
-                  <button className="btn-primary" style={{width:'100%'}} onClick={handleAuth}>
-                      {authMode === 'login' ? 'Войти' : 'Создать аккаунт'}
-                  </button>
-
+                  <button className="btn-primary" style={{width:'100%'}} onClick={handleAuth}>{authMode === 'login' ? 'Войти' : 'Создать аккаунт'}</button>
                   <span className="auth-link" onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
                       {authMode === 'login' ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
                   </span>
@@ -134,27 +142,19 @@ function App() {
       )
   }
 
-  // === ЭКРАН АДМИНКИ ===
   if (showAdmin && adminData) {
       return (
           <div className="admin-overlay">
-              <div className="admin-header">
-                <h1>📊 Панель Инвестора</h1>
-                <button onClick={() => setShowAdmin(false)} className="btn-primary" style={{background:'#4b5563'}}>Закрыть</button>
-              </div>
+              <div className="admin-header"><h1>📊 Панель Инвестора</h1><button onClick={() => setShowAdmin(false)} className="btn-primary" style={{background:'#4b5563'}}>Закрыть</button></div>
               <div className="stat-grid">
                   <div className="stat-card" style={{ background: '#2563eb' }}><h2>{adminData.users_count}</h2><p>Пользователей</p></div>
                   <div className="stat-card" style={{ background: '#10b981' }}><h2>{adminData.count}</h2><p>Моделей</p></div>
               </div>
-              <table className="data-table">
-                  <thead><tr><th>ID</th><th>Параметры</th></tr></thead>
-                  <tbody>{adminData.list.map(m => <tr key={m.id}><td>{m.id}</td><td>{m.measurements.waist} / {m.measurements.height}</td></tr>)}</tbody>
-              </table>
+              <table className="data-table"><thead><tr><th>ID</th><th>Параметры</th></tr></thead><tbody>{adminData.list.map(m => <tr key={m.id}><td>{m.id}</td><td>{m.measurements.waist} / {m.measurements.height}</td></tr>)}</tbody></table>
           </div>
       )
   }
 
-  // === ОСНОВНОЕ ПРИЛОЖЕНИЕ ===
   return (
     <div className="app-container">
       <div className="sidebar">
@@ -163,12 +163,10 @@ function App() {
                 <h2 style={{margin:0, fontSize:'1.2rem'}}>👤 Профиль</h2>
                 <button onClick={logout} style={{background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:'0.9rem'}}>Выйти</button>
             </div>
-            
             <div className="input-group"><label>Рост</label><input type="number" value={measurements.height} onChange={(e)=>updateMeasure('height',e.target.value)} /></div>
             <div className="input-group"><label>Талия</label><input type="number" value={measurements.waist} onChange={(e)=>updateMeasure('waist',e.target.value)} /></div>
             <div className="input-group"><label>Ноги</label><input type="number" value={measurements.leg_length} onChange={(e)=>updateMeasure('leg_length',e.target.value)} /></div>
         </div>
-
         <div className={`panel-card model-card ${isModel ? 'active' : ''}`}>
             <label style={{display:'flex', alignItems:'center', cursor:'pointer', fontWeight:'bold'}}>
                 <input type="checkbox" checked={isModel} onChange={handleBecomeModel} style={{width:'20px', height:'20px', marginRight:'12px'}} />
@@ -183,7 +181,6 @@ function App() {
           <input type="text" className="search-input" value={query} onChange={(e) => setQuery(e.target.value)} />
           <button onClick={handleSearch} className="btn-primary">{loading ? "..." : "Подобрать"}</button>
         </div>
-
         <div className="products-grid">
           {results.map((item) => (
             <div key={item.id} className="product-card">

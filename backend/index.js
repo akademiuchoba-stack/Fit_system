@@ -3,8 +3,8 @@ const axios = require('axios');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const bcrypt = require('bcryptjs'); // Для шифрования паролей
-const jwt = require('jsonwebtoken'); // Для токенов авторизации
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const { analyzeFit } = require('./services/fitLogic');
@@ -13,37 +13,28 @@ const { aggregateOffers } = require('./services/aggregator');
 app.use(cors());
 app.use(express.json());
 
-// СЕКРЕТНЫЙ КЛЮЧ (в реальном проекте прячут в .env)
 const JWT_SECRET = "my_super_secret_key_123";
-
-// ПУТИ К БАЗАМ ДАННЫХ
 const DATA_DIR = path.join(__dirname, 'data');
 const MODELS_DB_PATH = path.join(DATA_DIR, 'models_db.json');
 const USERS_DB_PATH = path.join(DATA_DIR, 'users_db.json');
 
-// Инициализация баз данных
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 if (!fs.existsSync(MODELS_DB_PATH)) fs.writeFileSync(MODELS_DB_PATH, JSON.stringify([]));
 if (!fs.existsSync(USERS_DB_PATH)) fs.writeFileSync(USERS_DB_PATH, JSON.stringify([]));
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 function readUsers() { return JSON.parse(fs.readFileSync(USERS_DB_PATH)); }
 function saveUsers(data) { fs.writeFileSync(USERS_DB_PATH, JSON.stringify(data, null, 2)); }
 
-// === 1. АВТОРИЗАЦИЯ ===
+// === АВТОРИЗАЦИЯ ===
 
-// РЕГИСТРАЦИЯ
+// 1. РЕГИСТРАЦИЯ
 app.post('/api/auth/register', async (req, res) => {
     const { email, password, measurements } = req.body;
     const users = readUsers();
 
-    if (users.find(u => u.email === email)) {
-        return res.status(400).json({ error: "Пользователь уже существует" });
-    }
+    if (users.find(u => u.email === email)) return res.status(400).json({ error: "Пользователь уже существует" });
 
-    // Шифруем пароль
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const newUser = {
         id: "u_" + Date.now(),
         email,
@@ -59,15 +50,13 @@ app.post('/api/auth/register', async (req, res) => {
     res.json({ token, user: { email: newUser.email, measurements: newUser.measurements } });
 });
 
-// ВХОД
+// 2. ВХОД
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     const users = readUsers();
     const user = users.find(u => u.email === email);
 
     if (!user) return res.status(400).json({ error: "Пользователь не найден" });
-
-    // Проверяем пароль
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ error: "Неверный пароль" });
 
@@ -75,7 +64,34 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ token, user: { email: user.email, measurements: user.measurements, isModel: user.isModel } });
 });
 
-// ОБНОВЛЕНИЕ ЗАМЕРОВ (Личный кабинет)
+// 3. ПОЛУЧЕНИЕ ПРОФИЛЯ ПО ТОКЕНУ (НОВОЕ - ДЛЯ СОХРАНЕНИЯ ДАННЫХ ПРИ F5)
+app.get('/api/auth/me', (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: "Нет токена" });
+
+    const token = authHeader.split(' ')[1]; // Убираем слово "Bearer"
+    
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const users = readUsers();
+        const user = users.find(u => u.id === decoded.id);
+        
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        // Возвращаем данные без пароля
+        res.json({ 
+            user: { 
+                email: user.email, 
+                measurements: user.measurements,
+                isModel: user.isModel 
+            } 
+        });
+    } catch (e) {
+        res.status(401).json({ error: "Неверный токен" });
+    }
+});
+
+// 4. ОБНОВЛЕНИЕ ЗАМЕРОВ
 app.post('/api/user/update', (req, res) => {
     const { token, measurements } = req.body;
     try {
@@ -94,15 +110,11 @@ app.post('/api/user/update', (req, res) => {
     }
 });
 
-// === 2. ОСНОВНОЙ ФУНКЦИОНАЛ ===
+// === ОСНОВНОЙ ФУНКЦИОНАЛ ===
 
 app.post('/api/recommend', async (req, res) => {
     const { query, maxPrice, userMeasurements } = req.body;
-    
-    // Если замеров нет, отправляем ошибку
-    if (!userMeasurements || userMeasurements.waist === 0) {
-        return res.status(400).json({ error: "Заполните размеры в профиле!" });
-    }
+    if (!userMeasurements || userMeasurements.waist === 0) return res.status(400).json({ error: "Заполните размеры в профиле!" });
 
     try {
         const shopResponse = await axios.post('http://127.0.0.1:5001/api/search', {
@@ -120,9 +132,7 @@ app.post('/api/recommend', async (req, res) => {
     }
 });
 
-// Стать моделью
 app.post('/api/become-model', (req, res) => {
-    // Та же логика, что была, просто сохраняем в models_db
     const { measurements } = req.body;
     try {
         const currentData = JSON.parse(fs.readFileSync(MODELS_DB_PATH));
@@ -133,7 +143,6 @@ app.post('/api/become-model', (req, res) => {
     } catch (e) { res.status(500).json({ error: "Error" }); }
 });
 
-// Админка
 app.get('/api/admin/stats', (req, res) => {
     try {
         const models = JSON.parse(fs.readFileSync(MODELS_DB_PATH));
@@ -142,7 +151,7 @@ app.get('/api/admin/stats', (req, res) => {
         models.forEach(m => totalWaist += (m.measurements.waist || 0));
         res.json({
             count: models.length,
-            users_count: users.length, // Новая метрика
+            users_count: users.length,
             avg_waist: models.length > 0 ? Math.round(totalWaist / models.length) : 0,
             list: models.reverse()
         });

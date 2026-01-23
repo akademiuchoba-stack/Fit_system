@@ -62,37 +62,48 @@ function calculateSmartFit(userBody, itemMeasurements) {
 
 app.get('/', (req, res) => res.send('Fit System Backend v2 (Smart Algo) 🚀'));
 
+// backend/index.js
+// (Верхняя часть с require и allowance остается той же)
+
+// ... код allowance ...
+
 app.post('/api/recommend', async (req, res) => {
-    const { query, maxPrice } = req.body;
-    console.log(`[BACKEND] Запрос: ${query}`);
+    // ТЕПЕРЬ МЫ ПОЛУЧАЕМ РАЗМЕРЫ ОТ ПОЛЬЗОВАТЕЛЯ
+    const { query, maxPrice, userMeasurements } = req.body;
+    
+    console.log(`[BACKEND] Поиск: "${query}" для размеров:`, userMeasurements);
+
+    if (!userMeasurements) {
+        return res.status(400).json({ error: "Не переданы размеры тела" });
+    }
 
     try {
-        // Идем в магазин
-        // Важно: используем 127.0.0.1, так как магазин на том же сервере
+        // 1. Идем в магазин
         const shopResponse = await axios.post('http://127.0.0.1:5001/api/search', {
             query, gender: "female", max_price: maxPrice
         });
 
-        // Применяем алгоритм
+        // 2. Считаем посадку под КОНКРЕТНОГО пользователя
         const products = shopResponse.data.map(item => {
-            const fitAnalysis = calculateSmartFit(currentUser.measurements, item.measurements);
+            // Передаем пришедшие от фронтенда размеры в функцию
+            const fitAnalysis = calculateSmartFit(userMeasurements, item.measurements);
             
             return {
                 ...item,
                 fit_result: fitAnalysis.isMatch ? "✅ ПОДХОДИТ" : "❌ НЕТ",
                 fit_details: fitAnalysis.reason,
-                match_score: fitAnalysis.score // Для сортировки
+                match_score: fitAnalysis.score
             };
         });
 
-        // Сортируем: сначала самые подходящие
+        // Сортировка
         products.sort((a, b) => b.match_score - a.match_score);
 
         res.json(products);
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Ошибка алгоритма" });
+        res.status(500).json({ error: "Ошибка сервера" });
     }
 });
 

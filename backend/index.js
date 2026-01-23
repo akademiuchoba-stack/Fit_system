@@ -6,36 +6,93 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 1. Тестовый пользователь (пока зашит жестко)
 const currentUser = {
     id: 1,
-    measurements: { waist: 66, hip: 91 } 
+    name: "Мария",
+    measurements: { 
+        waist: 66,       // Талия
+        hip: 91,         // Бедра
+        leg_length: 99,  // Длина ноги
+        shoulder: 38     // Плечи
+    }
 };
 
-app.get('/', (req, res) => res.send('Fit System Backend работает! 🚀'));
+// 2. Идеальные припуски (сколько см свободы должно быть)
+const idealAllowance = {
+    waist: 2,      // Талия: +2 см к телу
+    hip: 4,        // Бедра: +4 см к телу
+    leg_length: 3, // Длина: +3 см (запас на обувь/сборки)
+    shoulder: 1    // Плечи: +1 см
+};
+
+// 3. Функция умной проверки с компенсацией
+function calculateSmartFit(userBody, itemMeasurements) {
+    let score = 0; 
+    let issues = []; 
+
+    // --- ПРОВЕРКА ТАЛИИ ---
+    // Формула: Размер вещи - (Тело + Припуск)
+    const waistDiff = itemMeasurements.waist - (userBody.waist + idealAllowance.waist);
+    
+    if (waistDiff < -2) issues.push("Очень туго в талии");
+    else if (waistDiff > 6) issues.push("Велико в талии");
+    else score += 10; // Попали в диапазон
+
+    // --- ПРОВЕРКА ДЛИНЫ НОГ (с логикой подшива) ---
+    const legDiff = itemMeasurements.leg_length - userBody.leg_length;
+    
+    if (legDiff >= 0 && legDiff <= 5) {
+        score += 10; // Идеальная длина
+    } else if (legDiff > 5) {
+        issues.push("Длинные (нужно подшить)");
+        score += 5; // Это не страшно, можно брать
+    } else if (legDiff < 0) {
+        issues.push("Короткие!"); 
+        score = -50; // Критично
+    }
+
+    // Итог
+    return {
+        isMatch: score > 0,
+        score: score,
+        reason: issues.length > 0 ? issues.join(", ") : "🔥 Идеальная посадка"
+    };
+}
+
+app.get('/', (req, res) => res.send('Fit System Backend v2 (Smart Algo) 🚀'));
 
 app.post('/api/recommend', async (req, res) => {
     const { query, maxPrice } = req.body;
+    console.log(`[BACKEND] Запрос: ${query}`);
+
     try {
-        // Запрос к магазину (обращаемся к локальному адресу сервера)
+        // Идем в магазин
+        // Важно: используем 127.0.0.1, так как магазин на том же сервере
         const shopResponse = await axios.post('http://127.0.0.1:5001/api/search', {
-            query,
-            gender: "female",
-            max_price: maxPrice
+            query, gender: "female", max_price: maxPrice
         });
 
-        // Простой алгоритм подбора
+        // Применяем алгоритм
         const products = shopResponse.data.map(item => {
-            const diff = item.measurements.waist - currentUser.measurements.waist;
-            const isFit = diff >= 0 && diff <= 4;
+            const fitAnalysis = calculateSmartFit(currentUser.measurements, item.measurements);
+            
             return {
                 ...item,
-                fit_result: isFit ? "✅ ИДЕАЛЬНО" : "❌ Не подходит",
-                fit_details: isFit ? `Запас ${diff}см` : `Разница ${diff}см`
+                fit_result: fitAnalysis.isMatch ? "✅ ПОДХОДИТ" : "❌ НЕТ",
+                fit_details: fitAnalysis.reason,
+                match_score: fitAnalysis.score // Для сортировки
             };
         });
+
+        // Сортируем: сначала самые подходящие
+        products.sort((a, b) => b.match_score - a.match_score);
+
         res.json(products);
+
     } catch (error) {
-        res.status(500).json({ error: "Ошибка связи" });
+        console.error(error);
+        res.status(500).json({ error: "Ошибка алгоритма" });
     }
 });
 

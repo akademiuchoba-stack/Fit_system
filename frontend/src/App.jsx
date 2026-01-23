@@ -33,7 +33,7 @@ function App() {
     if (checked) {
         try {
             // ⚠️ ВСТАВЬТЕ СЮДА ВАШ IP
-            await fetch('http://ВАШ_IP_АДРЕС:5000/api/become-model', {
+            await fetch('http://109.73.193.225:5000/api/become-model', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ measurements })

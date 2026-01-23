@@ -15,7 +15,7 @@ function App() {
     setLoading(true);
     try {
       // ⚠️ ВСТАВЬТЕ СЮДА ВАШ IP
-      const response = await fetch('http://ВАШ_IP_АДРЕС:5000/api/recommend', {
+      const response = await fetch('http://109.73.193.225:5000/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, maxPrice: 10000, userMeasurements: measurements })

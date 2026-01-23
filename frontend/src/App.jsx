@@ -1,17 +1,11 @@
 import { useState } from 'react'
 
 function App() {
-  // Состояние для поиска
   const [query, setQuery] = useState("джинсы");
-  
-  // Состояние для размеров пользователя (по умолчанию - Модель Мария)
+  // Тестовые размеры (Рост 175, Нога 82, Талия 70)
   const [measurements, setMeasurements] = useState({
-    waist: 66,
-    hip: 91,
-    leg_length: 99,
-    shoulder: 38
+    waist: 70, hip: 96, leg_length: 82, height: 175
   });
-
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -22,98 +16,72 @@ function App() {
       const response = await fetch('http://109.73.193.225:5000/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            query: query, 
-            maxPrice: 10000,
-            userMeasurements: measurements // ОТПРАВЛЯЕМ РАЗМЕРЫ
-        })
+        body: JSON.stringify({ query, maxPrice: 10000, userMeasurements: measurements })
       });
       const data = await response.json();
       setResults(data);
-    } catch (error) {
-      alert("Ошибка. Проверьте консоль.");
-    }
+    } catch (error) { alert("Ошибка сети"); }
     setLoading(false);
   };
 
-  // Функция для обновления конкретного размера
-  const updateMeasure = (key, value) => {
-    setMeasurements(prev => ({ ...prev, [key]: Number(value) }));
-  };
+  const updateMeasure = (key, val) => setMeasurements(p => ({ ...p, [key]: Number(val) }));
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px', fontFamily: 'Arial', display: 'flex', gap: '40px' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px', fontFamily: 'Arial', display: 'flex', gap: '20px' }}>
       
-      {/* ЛЕВАЯ КОЛОНКА: Профиль пользователя */}
-      <div style={{ flex: '0 0 250px', background: '#f8f9fa', padding: '20px', borderRadius: '10px', height: 'fit-content' }}>
-        <h2>📏 Мои размеры</h2>
-        <div style={{ marginBottom: '15px' }}>
-          <label>Талия (см):</label>
-          <input type="number" value={measurements.waist} onChange={(e) => updateMeasure('waist', e.target.value)} style={{ width: '100%', padding: '5px' }} />
-        </div>
-        <div style={{ marginBottom: '15px' }}>
-          <label>Бёдра (см):</label>
-          <input type="number" value={measurements.hip} onChange={(e) => updateMeasure('hip', e.target.value)} style={{ width: '100%', padding: '5px' }} />
-        </div>
-        <div style={{ marginBottom: '15px' }}>
-          <label>Длина ноги (см):</label>
-          <input type="number" value={measurements.leg_length} onChange={(e) => updateMeasure('leg_length', e.target.value)} style={{ width: '100%', padding: '5px' }} />
-        </div>
-        <div style={{ marginBottom: '15px' }}>
-          <label>Плечи (см):</label>
-          <input type="number" value={measurements.shoulder} onChange={(e) => updateMeasure('shoulder', e.target.value)} style={{ width: '100%', padding: '5px' }} />
-        </div>
+      {/* ЛЕВО: Размеры */}
+      <div style={{ flex: '0 0 200px', background: '#f4f4f4', padding: '15px', borderRadius: '8px', height: 'fit-content' }}>
+        <h3>📏 Мои замеры</h3>
+        <label>Рост (см): <input type="number" value={measurements.height} onChange={(e)=>updateMeasure('height',e.target.value)} style={{width:'100%'}} /></label>
+        <br/><br/>
+        <label>Талия (см): <input type="number" value={measurements.waist} onChange={(e)=>updateMeasure('waist',e.target.value)} style={{width:'100%'}} /></label>
+        <br/><br/>
+        <label>Дл. ноги (см): <input type="number" value={measurements.leg_length} onChange={(e)=>updateMeasure('leg_length',e.target.value)} style={{width:'100%'}} /></label>
       </div>
 
-      {/* ПРАВАЯ КОЛОНКА: Поиск и результаты */}
+      {/* ПРАВО: Выдача */}
       <div style={{ flex: 1 }}>
-        <h1>👖 Fit System MVP</h1>
-        
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-          <input 
-            type="text" 
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{ flex: 1, padding: '10px', fontSize: '16px' }}
-          />
-          <button 
-            onClick={handleSearch}
-            style={{ padding: '10px 20px', background: '#007bff', color: 'white', border: 'none', cursor: 'pointer', fontSize: '16px' }}
-          >
-            {loading ? "Примеряем..." : "Подобрать"}
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} style={{ flex: 1, padding: '10px' }} />
+          <button onClick={handleSearch} style={{ padding: '10px 20px', background: '#007bff', color: 'white', border: 'none' }}>
+            {loading ? "..." : "Найти"}
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gap: '20px' }}>
           {results.map((item) => (
-            <div key={item.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '8px' }}>
-              <h3>{item.name}</h3>
-              <p style={{ fontWeight: 'bold' }}>{item.price} ₽</p>
+            <div key={item.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '8px', display: 'flex', gap: '20px' }}>
+              <div style={{flex: '0 0 100px', background: '#eee', height: '100px'}}></div>
               
-              {/* Блок результата примерки */}
-              <div style={{ 
-                background: item.fit_result.includes("ПОДХОДИТ") ? '#d4edda' : '#f8d7da', 
-                padding: '10px', 
-                borderRadius: '5px', 
-                marginTop: '10px',
-                border: item.fit_result.includes("ПОДХОДИТ") ? '1px solid #c3e6cb' : '1px solid #f5c6cb'
-              }}>
-                <b style={{ color: item.fit_result.includes("ПОДХОДИТ") ? '#155724' : '#721c24' }}>
-                    {item.fit_result}
-                </b>
-                <div style={{ fontSize: '13px', marginTop: '5px' }}>{item.fit_details}</div>
-              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{margin: '0 0 5px 0'}}>{item.brand} / {item.name}</h3>
+                
+                {/* Результат примерки */}
+                <div style={{ 
+                  background: item.fit_result.includes("ПОДХОДИТ") ? '#d4edda' : '#f8d7da', 
+                  padding: '5px 10px', borderRadius: '4px', display: 'inline-block', marginBottom: '10px' 
+                }}>
+                  <b>{item.fit_result}</b> <small>{item.fit_details}</small>
+                </div>
 
-              <a href={item.link} target="_blank" style={{ display: 'block', marginTop: '10px', color: 'blue', textDecoration: 'none' }}>
-                Купить в магазине →
-              </a>
+                {/* СПИСОК МАГАЗИНОВ */}
+                <div style={{ background: '#f9f9f9', padding: '10px', borderRadius: '5px' }}>
+                    <small style={{color: '#666'}}>Где купить:</small>
+                    {item.offers.map((offer, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #eee' }}>
+                            <a href={offer.link} target="_blank" style={{ color: '#007bff' }}>
+                                {offer.shop_name} ({offer.delivery_days} дн.)
+                            </a>
+                            <b style={{ color: idx === 0 ? 'green' : 'black' }}>{offer.price} ₽</b>
+                        </div>
+                    ))}
+                </div>
+              </div>
             </div>
           ))}
         </div>
       </div>
-
     </div>
   )
 }
-
 export default App

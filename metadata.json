@@ -1,0 +1,7 @@
+{
+  "name": "Fit_system - Ideal Ease",
+  "description": "A professional clothing fit recommendation system using the proprietary 'Ideal Ease' algorithm to match user body parameters with store inventory.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

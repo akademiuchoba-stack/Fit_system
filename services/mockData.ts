@@ -1,0 +1,78 @@
+
+import { Product, Category } from '../types';
+
+export const MOCK_PRODUCTS: Product[] = [
+  {
+    sku: 'OST-10234-WH',
+    name: 'Рубашка хлопковая Slim Fit',
+    image_url: 'https://picsum.photos/seed/shirt1/400/500',
+    category: Category.UPPER,
+    in_stock: true,
+    garment_chest: 104,
+    garment_waist: 98,
+    garment_hips: 106,
+    garment_length: 74,
+    sleeve_length: 64,
+    inseam: 0,
+    elasticity_percent: 2,
+    model_info: { height: 185, chest: 100, waist: 88, hips: 98, size: 'L' }
+  },
+  {
+    sku: 'OST-88921-DN',
+    name: 'Джинсы прямые Regular',
+    image_url: 'https://picsum.photos/seed/jeans1/400/500',
+    category: Category.LOWER,
+    in_stock: true,
+    garment_chest: 0,
+    garment_waist: 92,
+    garment_hips: 108,
+    garment_length: 105,
+    sleeve_length: 0,
+    inseam: 82,
+    elasticity_percent: 5,
+    model_info: { height: 188, chest: 98, waist: 86, hips: 102, size: '32/32' }
+  },
+  {
+    sku: 'OST-44512-TS',
+    name: 'Футболка Oversize Heavy Cotton',
+    image_url: 'https://picsum.photos/seed/tshirt2/400/500',
+    category: Category.UPPER,
+    in_stock: true,
+    garment_chest: 120,
+    garment_waist: 118,
+    garment_hips: 120,
+    garment_length: 78,
+    sleeve_length: 26,
+    inseam: 0,
+    elasticity_percent: 0,
+    model_info: { height: 180, chest: 95, waist: 80, hips: 95, size: 'XL' }
+  },
+  {
+    sku: 'OST-33210-BL',
+    name: 'Блейзер классический',
+    image_url: 'https://picsum.photos/seed/blazer/400/500',
+    category: Category.UPPER,
+    in_stock: true,
+    garment_chest: 100,
+    garment_waist: 94,
+    garment_hips: 102,
+    garment_length: 72,
+    sleeve_length: 63,
+    inseam: 0,
+    elasticity_percent: 1,
+  },
+  {
+    sku: 'OST-90012-CH',
+    name: 'Брюки чинос Stretch',
+    image_url: 'https://picsum.photos/seed/chinos/400/500',
+    category: Category.LOWER,
+    in_stock: true,
+    garment_chest: 0,
+    garment_waist: 88,
+    garment_hips: 100,
+    garment_length: 102,
+    sleeve_length: 0,
+    inseam: 78,
+    elasticity_percent: 8,
+  }
+];

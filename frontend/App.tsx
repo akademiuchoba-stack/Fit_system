@@ -1,34 +1,41 @@
-
 import React from 'react';
 import BodyMetricsForm from './components/BodyMetricsForm';
 import ProductCard from './components/ProductCard';
 import { UserParams, MatchResult } from './types';
-import { STORE_INVENTORY } from '../shops/angarsk_festival';
-import { calculateMatch } from '../backend/matchingAlgorithm';
+
+// В продакшене URL будет браться из конфига или окружения
+// Для локальной разработки Docker Compose это обычно localhost:8000
+const API_BASE_URL = 'http://localhost:8000';
 
 const App: React.FC = () => {
   const [results, setResults] = React.useState<MatchResult[]>([]);
   const [hasSearched, setHasSearched] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const handleSearch = async (params: UserParams) => {
     setIsLoading(true);
     setHasSearched(true);
+    setError(null);
     
-    // Имитация "умного" анализа на сервере
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
     try {
-      // Здесь в будущем будет fetch к вашему FastAPI на Timeweb
-      const matches: MatchResult[] = STORE_INVENTORY.map(product => ({
-        product,
-        verdict: calculateMatch(params, product)
-      }));
-      
-      matches.sort((a, b) => b.verdict.score - a.verdict.score);
-      setResults(matches);
-    } catch (error) {
-      console.error("Ошибка API:", error);
+      const response = await fetch(`${API_BASE_URL}/api/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка сервера: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setResults(data);
+    } catch (err) {
+      console.error("Ошибка при поиске:", err);
+      setError("Не удалось соединиться с сервером. Проверьте запуск бэкенда.");
     } finally {
       setIsLoading(false);
       setTimeout(() => {
@@ -73,6 +80,15 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {error && (
+              <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl text-sm font-medium flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                  <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
+                </svg>
+                {error}
+              </div>
+            )}
+
             {isLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                 {[1, 2].map(i => (
@@ -84,6 +100,12 @@ const App: React.FC = () => {
                 {results.map((res) => (
                   <ProductCard key={res.product.sku} result={res} />
                 ))}
+              </div>
+            )}
+
+            {!isLoading && !error && results.length === 0 && (
+              <div className="text-center py-20 bg-white rounded-3xl border border-slate-100">
+                <p className="text-slate-400 font-medium">К сожалению, ничего не подошло под ваши параметры.</p>
               </div>
             )}
           </section>

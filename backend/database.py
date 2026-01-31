@@ -21,3 +21,4 @@ class Product(Base):
     elasticity_percent = Column(Float, default=0)
 
 Base.metadata.create_all(bind=engine)
+.

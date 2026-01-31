@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Идеальный Припуск — MVP</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+        #res { margin-top: 20px; font-weight: bold; color: #28a745; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Идеальный Припуск</h1>
+        <p>Нажми для проверки связи с Backend</p>
+        <button onclick="check()">Проверить систему</button>
+        <div id="res"></div>
+    </div>
+    <script>
+        async function check() {
+            const resDiv = document.getElementById('res');
+            try {
+                const r = await fetch('/api/status');
+                const d = await r.json();
+                resDiv.innerText = d.message;
+            } catch (e) {
+                resDiv.innerText = "Ошибка связи!";
+                resDiv.style.color = "red";
+            }
+        }
+    </script>
+</body>
+</html>

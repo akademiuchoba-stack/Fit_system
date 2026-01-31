@@ -2,33 +2,62 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Идеальный Припуск — MVP</title>
+    <title>Идеальный Припуск — Подбор</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f0f2f5; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; }
-        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; }
-        #res { margin-top: 20px; font-weight: bold; color: #28a745; }
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 15px; width: 100%; border-radius: 10px; cursor: pointer; font-size: 16px; }
+        .result-card { border: 1px solid #eee; padding: 15px; margin-top: 15px; border-radius: 10px; border-left: 5px solid #007bff; }
+        .score { font-weight: bold; color: #28a745; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Идеальный Припуск</h1>
-        <p>Нажми для проверки связи с Backend</p>
-        <button onclick="check()">Проверить систему</button>
-        <div id="res"></div>
+    <div class="container">
+        <h2>Мои замеры (см)</h2>
+        <div class="input-group">
+            <label>Обхват груди</label>
+            <input type="number" id="chest" value="95">
+        </div>
+        <div class="input-group">
+            <label>Обхват талии</label>
+            <input type="number" id="waist" value="85">
+        </div>
+        <button onclick="findFit()">Найти в O'stin (Ангарск)</button>
+
+        <div id="results"></div>
     </div>
+
     <script>
-        async function check() {
-            const resDiv = document.getElementById('res');
-            try {
-                const r = await fetch('/api/status');
-                const d = await r.json();
-                resDiv.innerText = d.message;
-            } catch (e) {
-                resDiv.innerText = "Ошибка связи!";
-                resDiv.style.color = "red";
-            }
+        async function findFit() {
+            const params = {
+                chest: parseFloat(document.getElementById('chest').value),
+                waist: parseFloat(document.getElementById('waist').value)
+            };
+            
+            const resDiv = document.getElementById('results');
+            resDiv.innerHTML = "Считаем припуски...";
+
+            const response = await fetch('/api/match', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(params)
+            });
+            const data = await response.json();
+            
+            resDiv.innerHTML = "<h3>Подходящие товары:</h3>";
+            data.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'result-card';
+                div.innerHTML = `
+                    <strong>${item.name}</strong> (Арт: ${item.sku})<br>
+                    <span class="score">Рейтинг посадки: ${item.score}/5</span><br>
+                    <small>Вердикт: ${JSON.stringify(item.details)}</small>
+                `;
+                resDiv.appendChild(div);
+            });
         }
     </script>
 </body>

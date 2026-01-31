@@ -2,62 +2,105 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Идеальный Припуск — Подбор</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Идеальный Припуск — Подбор одежды</title>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { background: #007bff; color: white; border: none; padding: 15px; width: 100%; border-radius: 10px; cursor: pointer; font-size: 16px; }
-        .result-card { border: 1px solid #eee; padding: 15px; margin-top: 15px; border-radius: 10px; border-left: 5px solid #007bff; }
-        .score { font-weight: bold; color: #28a745; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 800px; margin: auto; }
+        .user-form { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        .grid-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { background: #007bff; color: white; border: none; padding: 15px; width: 100%; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #0056b3; transform: translateY(-1px); }
+        
+        .product-card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border-left: 6px solid #ddd; }
+        .score-5 { border-left-color: #28a745; } /* Идеально */
+        .score-4 { border-left-color: #ffc107; } /* Хорошо */
+        .score-3 { border-left-color: #fd7e14; } /* Так себе */
+        .score-2 { border-left-color: #dc3545; } /* Плохо */
+        
+        .info h3 { margin: 0 0 5px 0; }
+        .details { font-size: 13px; color: #666; }
+        .score-badge { font-weight: bold; padding: 8px 15px; border-radius: 20px; background: #f8f9fa; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>Мои замеры (см)</h2>
-        <div class="input-group">
-            <label>Обхват груди</label>
-            <input type="number" id="chest" value="95">
+        <div class="user-form">
+            <h2>📏 Мои параметры (см)</h2>
+            <div class="grid-inputs">
+                <div>
+                    <label>Обхват груди</label>
+                    <input type="number" id="chest" value="96">
+                </div>
+                <div>
+                    <label>Обхват талии</label>
+                    <input type="number" id="waist" value="84">
+                </div>
+                <div>
+                    <label>Обхват бедер</label>
+                    <input type="number" id="hips" value="100">
+                </div>
+                <div>
+                    <label>Ваш рост</label>
+                    <input type="number" id="height" value="180">
+                </div>
+            </div>
+            <button onclick="calculateFit()">Рассчитать идеальный припуск</button>
         </div>
-        <div class="input-group">
-            <label>Обхват талии</label>
-            <input type="number" id="waist" value="85">
-        </div>
-        <button onclick="findFit()">Найти в O'stin (Ангарск)</button>
 
-        <div id="results"></div>
+        <div id="results-list">
+            </div>
     </div>
 
     <script>
-        async function findFit() {
+        async function calculateFit() {
             const params = {
                 chest: parseFloat(document.getElementById('chest').value),
-                waist: parseFloat(document.getElementById('waist').value)
+                waist: parseFloat(document.getElementById('waist').value),
+                hips: parseFloat(document.getElementById('hips').value),
+                height: parseFloat(document.getElementById('height').value)
             };
-            
-            const resDiv = document.getElementById('results');
-            resDiv.innerHTML = "Считаем припуски...";
 
-            const response = await fetch('/api/match', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(params)
-            });
-            const data = await response.json();
-            
-            resDiv.innerHTML = "<h3>Подходящие товары:</h3>";
-            data.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'result-card';
-                div.innerHTML = `
-                    <strong>${item.name}</strong> (Арт: ${item.sku})<br>
-                    <span class="score">Рейтинг посадки: ${item.score}/5</span><br>
-                    <small>Вердикт: ${JSON.stringify(item.details)}</small>
-                `;
-                resDiv.appendChild(div);
-            });
+            const list = document.getElementById('results-list');
+            list.innerHTML = "<p>Анализируем ассортимент O'stin Ангарск...</p>";
+
+            try {
+                const response = await fetch('/api/match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                const data = await response.json();
+                
+                list.innerHTML = "<h2>Результаты подбора:</h2>";
+                
+                data.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = `product-card score-${item.score}`;
+                    
+                    // Формируем описание вердикта
+                    let detailsText = "";
+                    for (const [key, val] of Object.entries(item.details)) {
+                        detailsText += `${key}: ${val} | `;
+                    }
+
+                    card.innerHTML = `
+                        <div class="info">
+                            <h3>${item.name}</h3>
+                            <div class="details">Артикул: ${item.sku} | Категория: ${item.category}</div>
+                            <div class="details"><strong>Вердикт:</strong> ${detailsText || 'Параметры в норме'}</div>
+                        </div>
+                        <div class="score-badge">
+                            Рейтинг: ${item.score}/5
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+            } catch (e) {
+                list.innerHTML = "<p style='color:red'>Ошибка при расчете. Проверьте соединение с сервером.</p>";
+            }
         }
     </script>
 </body>

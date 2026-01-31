@@ -15,4 +15,3 @@ app.mount("/", StaticFiles(directory=FRONTEND_PATH, html=True), name="frontend")
 @app.get("/")
 async def read_index():
     return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
-.

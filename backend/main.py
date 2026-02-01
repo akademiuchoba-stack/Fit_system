@@ -16,13 +16,11 @@ def get_db():
 def calculate_match(u, p):
     res = {}
     score = 5
-    # Логика для верха
     if p.category == "верх" and p.garment_chest:
         diff = p.garment_chest - u.get('chest', 0)
         if diff < 4: res['грудь'] = "Туго"; score -= 2
         elif diff > 15: res['грудь'] = "Оверсайз"; score -= 1
         else: res['грудь'] = "ОК"
-    # Логика для низа (талия/бедра)
     if p.garment_waist:
         diff_w = p.garment_waist - u.get('waist', 0)
         if diff_w < 2: res['талия'] = "Туго"; score -= 2
@@ -64,10 +62,15 @@ async def get_stats(db: Session = Depends(get_db)):
         p = db.query(Product).filter(Product.id==t.product_id).first()
         res.append({
             "date": t.timestamp.strftime("%d.%m %H:%M"), "user": t.user_name,
-            "product": f"{p.name} ({p.size})", "ok": "✓" if t.fit_ok else "✗", "note": t.conclusion
+            "product": f"{p.name if p else 'Удален'} ({p.size if p else '?'})", 
+            "ok": "✓" if t.fit_ok else "✗", "note": t.conclusion
         })
     return res
 
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+# Пути к статике
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_PATH = os.path.join(BASE_DIR, "frontend")
+
+app.mount("/static", StaticFiles(directory=FRONTEND_PATH), name="static")
 @app.get("/")
-async def index(): return FileResponse("../frontend/index.html")
+async def index(): return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))

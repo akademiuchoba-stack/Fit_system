@@ -13,11 +13,11 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     sku = Column(String, unique=True, index=True)
     name = Column(String)
-    size = Column(String) # S, M, L, XL, 48, 50...
+    size = Column(String) # S, M, L, 32/34 и т.д.
     image_url = Column(String, nullable=True)
     category = Column(String) # верх / низ
     in_stock = Column(Boolean, default=True)
-    # Параметры изделия (Парсинг)
+    # Замеры изделия с сайта
     garment_chest = Column(Float, nullable=True)
     garment_waist = Column(Float, nullable=True)
     garment_hips = Column(Float, nullable=True)

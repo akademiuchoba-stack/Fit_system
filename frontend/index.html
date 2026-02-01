@@ -3,34 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EComp — Мобильный Помощник</title>
+    <title>EComp — Помощник в магазине</title>
     <style>
         :root { --accent: #007aff; --bg: #f2f2f7; --card-bg: #ffffff; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 10px; }
         .card { background: var(--card-bg); border-radius: 12px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
-        
-        /* Профиль */
         .profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .profile-grid div label { font-size: 10px; color: #8e8e93; display: block; }
+        .profile-grid label { font-size: 10px; color: #8e8e93; display: block; }
         .profile-grid input { width: 100%; border: 1px solid #d1d1d6; border-radius: 6px; padding: 6px; font-size: 14px; }
-
-        /* Мини-карточка товара */
+        
         .product-card { background: white; border-radius: 12px; margin-bottom: 10px; overflow: hidden; border: 1px solid #e5e5ea; }
         .product-main { display: flex; align-items: center; padding: 10px; cursor: pointer; }
-        .product-img { width: 60px; height: 80px; object-fit: cover; border-radius: 6px; background: #eee; }
+        .product-img { width: 50px; height: 70px; object-fit: cover; border-radius: 4px; background: #eee; }
         .product-info { flex: 1; padding-left: 12px; }
         .product-name { font-weight: 600; font-size: 14px; margin: 0; }
-        .product-meta { font-size: 12px; color: #8e8e93; margin-top: 4px; }
-        .size-badge { background: #e9e9eb; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
-        .score-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .size-badge { background: #e9e9eb; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .score-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 
-        /* Раскрытая часть */
-        .product-details { max-height: 0; overflow: hidden; transition: 0.3s; background: #fafafa; padding: 0 15px; }
-        .product-card.open .product-details { max-height: 600px; padding: 15px; border-top: 1px solid #e5e5ea; }
+        .product-details { max-height: 0; overflow: hidden; transition: 0.3s; background: #fafafa; }
+        .product-card.open .product-details { max-height: 800px; padding: 15px; border-top: 1px solid #e5e5ea; }
         
         .real-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .btn { background: var(--accent); color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; margin-top: 15px; cursor: pointer; }
-        
+        .btn { background: var(--accent); color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; margin-top: 10px; }
         table { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 5px; text-align: left; }
     </style>
@@ -38,22 +32,22 @@
 <body>
 
 <div class="card">
-    <h3 style="margin-top:0;">Профиль</h3>
-    <input type="text" id="user_name" value="Тестер" style="width:100%; margin-bottom:10px; padding:6px;">
+    <h3 style="margin: 0 0 10px 0; font-size: 16px;">Профиль</h3>
+    <input type="text" id="user_name" value="Тестер" style="width:100%; margin-bottom:10px; padding:6px; border:1px solid #ddd; border-radius:6px;">
     <div class="profile-grid">
         <div><label>Грудь</label><input type="number" id="u_chest" value="96"></div>
         <div><label>Талия</label><input type="number" id="u_waist" value="84"></div>
         <div><label>Бедра</label><input type="number" id="u_hips" value="100"></div>
     </div>
-    <button class="btn" onclick="runMatch()">Рассчитать подбор</button>
+    <button class="btn" onclick="runMatch()">Найти размеры в магазине</button>
 </div>
 
 <div id="results"></div>
 
-<button onclick="loadAdmin()" style="display:block; margin:20px auto; color:#8e8e93; border:none; background:none; font-size:12px;">Открыть статистику</button>
+<button onclick="loadAdmin()" style="display:block; margin:20px auto; color:#8e8e93; border:none; background:none; font-size:12px; width:100%;">Открыть историю замеров</button>
 <div id="admin" class="card" style="display:none; overflow-x:auto;">
     <table id="admin-table">
-        <thead><tr><th>Дата</th><th>Юзер</th><th>Вещь</th><th>OK</th></tr></thead>
+        <thead><tr><th>Дата</th><th>Вещь</th><th>OK</th></tr></thead>
         <tbody id="admin-body"></tbody>
     </table>
 </div>
@@ -65,33 +59,37 @@
         const data = await res.json();
         
         results.innerHTML = data.map(i => {
-            // Умный показ полей: если низ - только талия/бедра
             const isTop = i.category === 'верх';
             const color = i.score > 3 ? '#34c759' : (i.score > 1 ? '#ffcc00' : '#ff3b30');
-            
             return `
             <div class="product-card">
                 <div class="product-main" onclick="this.parentElement.classList.toggle('open')">
-                    <img src="${i.image || ''}" class="product-img" alt="фото">
+                    <img src="${i.image || ''}" class="product-img">
                     <div class="product-info">
                         <p class="product-name">${i.name}</p>
-                        <div class="product-meta">
-                            <span class="size-badge">${i.size}</span> | 
-                            <span class="score-dot" style="background:${color}"></span> ${i.score}/5
+                        <div style="margin-top:4px;">
+                            <span class="size-badge">${i.size}</span>
+                            <span style="margin-left:10px; font-size:12px; color:#8e8e93;">
+                                <span class="score-dot" style="background:${color}"></span>Подходит на ${i.score}/5
+                            </span>
                         </div>
                     </div>
-                    <span style="color:#c7c7cc">▶</span>
                 </div>
                 <div class="product-details">
-                    <small style="color:#8e8e93">Сайт: ${isTop ? 'Г'+i.parsed.chest : ''} Т${i.parsed.waist} Б${i.parsed.hips}</small>
+                    <div style="font-size:11px; color:#8e8e93; margin-bottom:10px;">
+                        Парсинг: ${isTop ? 'Грудь '+i.parsed.chest+' ' : ''}Талия ${i.parsed.waist}
+                    </div>
                     <div class="real-grid">
                         ${isTop ? `<div><label>Реал Грудь</label><input type="number" id="rc_${i.id}"></div>` : ''}
                         <div><label>Реал Талия</label><input type="number" id="rw_${i.id}"></div>
                         <div><label>Реал Бедра</label><input type="number" id="rh_${i.id}"></div>
-                        <div style="padding-top:15px"><input type="checkbox" id="fok_${i.id}" style="width:auto"> <small>Подошло</small></div>
                     </div>
-                    <textarea id="concl_${i.id}" style="margin-top:10px; width:100%;" placeholder="Заметки (как ткань, длина и т.д.)"></textarea>
-                    <button class="btn" style="background:#34c759" onclick="saveStat(${i.id})">Записать результат</button>
+                    <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="fok_${i.id}" style="width:20px; height:20px;">
+                        <label style="font-size:14px; font-weight:500;">Вещь подошла идеально</label>
+                    </div>
+                    <textarea id="concl_${i.id}" style="margin-top:10px; width:100%; border-radius:6px; border:1px solid #ddd; padding:8px;" placeholder="Заметки по ткани, длине..."></textarea>
+                    <button class="btn" style="background:#34c759" onclick="saveStat(${i.id})">Сохранить замер</button>
                 </div>
             </div>
         `}).join('');
@@ -108,14 +106,14 @@
             conclusion: document.getElementById('concl_'+id).value
         };
         await fetch('/api/save-test', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-        alert("Замер сохранен в статистику!");
+        alert("Замер сохранен!");
     }
 
     async function loadAdmin() {
         admin.style.display = 'block';
         const res = await fetch('/api/admin/stats');
         const stats = await res.json();
-        admin_body.innerHTML = stats.map(s => `<tr><td>${s.date}</td><td>${s.user}</td><td>${s.product}</td><td>${s.ok}</td></tr>`).join('');
+        admin_body.innerHTML = stats.map(s => `<tr><td>${s.date}</td><td>${s.product}</td><td>${s.ok}</td></tr>`).join('');
     }
 </script>
 </body>

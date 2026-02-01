@@ -13,6 +13,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     sku = Column(String, unique=True, index=True)
     name = Column(String)
+    size = Column(String) # S, M, L, XL, 48, 50...
     image_url = Column(String, nullable=True)
     category = Column(String) # верх / низ
     in_stock = Column(Boolean, default=True)
@@ -31,14 +32,12 @@ class MeasurementTest(Base):
     user_name = Column(String)
     product_id = Column(Integer, ForeignKey("products.id"))
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
-    # Замеры пользователя при тесте
     u_chest = Column(Float)
     u_waist = Column(Float)
     u_hips = Column(Float)
-    u_height = Column(Float)
-    # Реальные замеры изделия в магазине
-    real_chest = Column(Float)
-    real_waist = Column(Float)
+    real_chest = Column(Float, nullable=True)
+    real_waist = Column(Float, nullable=True)
+    real_hips = Column(Float, nullable=True)
     fit_ok = Column(Boolean)
     conclusion = Column(String)
 

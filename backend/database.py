@@ -13,14 +13,16 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     sku = Column(String, unique=True, index=True)
     name = Column(String)
-    category = Column(String)
+    image_url = Column(String, nullable=True)
+    category = Column(String) # верх / низ
     in_stock = Column(Boolean, default=True)
-    # Замеры изделия (с сайта)
-    garment_chest = Column(Float)
-    garment_waist = Column(Float)
-    garment_hips = Column(Float)
-    garment_shoulders = Column(Float)
-    garment_sleeve = Column(Float)
+    # Параметры изделия (Парсинг)
+    garment_chest = Column(Float, nullable=True)
+    garment_waist = Column(Float, nullable=True)
+    garment_hips = Column(Float, nullable=True)
+    garment_shoulders = Column(Float, nullable=True)
+    garment_sleeve = Column(Float, nullable=True)
+    garment_height = Column(Float, nullable=True)
     elasticity_percent = Column(Float, default=0.0)
 
 class MeasurementTest(Base):
@@ -29,11 +31,12 @@ class MeasurementTest(Base):
     user_name = Column(String)
     product_id = Column(Integer, ForeignKey("products.id"))
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
-    # Что было у юзера
+    # Замеры пользователя при тесте
     u_chest = Column(Float)
     u_waist = Column(Float)
     u_hips = Column(Float)
-    # Что намерили в реале
+    u_height = Column(Float)
+    # Реальные замеры изделия в магазине
     real_chest = Column(Float)
     real_waist = Column(Float)
     fit_ok = Column(Boolean)

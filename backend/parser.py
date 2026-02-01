@@ -2,40 +2,29 @@ from database import SessionLocal, Product
 
 def seed_data():
     db = SessionLocal()
-    # Очистим старые тестовые данные, если они есть
     db.query(Product).delete()
     
-    products = [
+    test_products = [
         {
-            "sku": "OST-SHIRT-001",
-            "name": "Рубашка Slim Fit O'stin",
-            "image_url": "https://ostin.com/upload/shirt.jpg",
-            "category": "верх",
-            "in_stock": True,
-            "garment_chest": 102.0,  # Замер изделия в груди
-            "garment_waist": 96.0,   # Замер в талии
-            "garment_hips": 100.0,
-            "elasticity_percent": 2.0 # Немного тянется
+            "sku": "OST-SH-001", "name": "Рубашка O'stin Regular", "category": "верх",
+            "image_url": "https://ostin.com/1.jpg",
+            "garment_chest": 108.0, "garment_waist": 104.0, "garment_hips": 106.0,
+            "garment_shoulders": 46.0, "garment_sleeve": 66.0, "garment_height": 182.0
         },
         {
-            "sku": "OST-PANTS-002",
-            "name": "Брюки Chino O'stin",
-            "image_url": "https://ostin.com/upload/pants.jpg",
-            "category": "низ",
-            "in_stock": True,
-            "garment_chest": None,
-            "garment_waist": 88.0,
-            "garment_hips": 104.0,
-            "elasticity_percent": 5.0 # Хорошо тянутся
+            "sku": "OST-JN-002", "name": "Джинсы O'stin Slim", "category": "низ",
+            "image_url": "https://ostin.com/2.jpg",
+            "garment_chest": None, "garment_waist": 88.0, "garment_hips": 102.0,
+            "garment_shoulders": None, "garment_sleeve": None, "garment_height": 110.0
         }
     ]
-
-    for p in products:
+    
+    for p in test_products:
         db.add(Product(**p))
     
     db.commit()
     db.close()
-    print("База данных наполнена товарами O'stin (Ангарск)")
+    print("База успешно наполнена 6-параметрическими товарами!")
 
 if __name__ == "__main__":
     seed_data()

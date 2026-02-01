@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EComp — Исследование</title>
+    <title>EComp — Аналитика</title>
     <style>
-        body { font-family: system-ui; background: #f0f2f5; margin: 0; padding: 15px; color: #1c1e21; }
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
-        .grid-compact { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .grid-compact label { font-size: 10px; text-transform: uppercase; color: #65676b; }
-        .grid-compact input { width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #f0f2f5; margin: 0; padding: 10px; }
+        .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; }
+        .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        label { font-size: 10px; color: #65676b; text-transform: uppercase; }
+        input, textarea { width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
         .btn { background: #007bff; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
-        .accordion { background: white; border-radius: 8px; margin-bottom: 8px; border: 1px solid #dee2e6; }
-        .acc-header { padding: 12px; cursor: pointer; display: flex; justify-content: space-between; font-weight: 500; }
+        .accordion { background: white; border-radius: 8px; margin-bottom: 5px; border: 1px solid #dee2e6; overflow: hidden; }
+        .acc-header { padding: 12px; cursor: pointer; display: flex; justify-content: space-between; font-size: 14px; }
         .acc-body { padding: 0 12px; max-height: 0; overflow: hidden; transition: 0.3s; background: #f8f9fa; }
-        .accordion.open .acc-body { padding: 12px; max-height: 500px; border-top: 1px solid #dee2e6; }
+        .accordion.open .acc-body { padding: 12px; max-height: 600px; border-top: 1px solid #dee2e6; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
         th, td { border: 1px solid #ddd; padding: 4px; text-align: left; }
     </style>
@@ -22,9 +22,9 @@
 <body>
 
 <div class="card">
-    <h2 style="margin:0 0 10px 0; font-size: 16px;">Профиль</h2>
-    <input type="text" id="user_name" value="Тестер" style="width:100%; margin-bottom:10px; padding:6px; border-radius:4px; border:1px solid #ddd;">
-    <div class="grid-compact">
+    <h2 style="margin:0 0 10px 0; font-size:16px;">Профиль</h2>
+    <input type="text" id="user_name" value="Тестер" style="margin-bottom:10px;">
+    <div class="grid-6">
         <div><label>Грудь</label><input type="number" id="u_chest" value="96"></div>
         <div><label>Талия</label><input type="number" id="u_waist" value="84"></div>
         <div><label>Бедра</label><input type="number" id="u_hips" value="100"></div>
@@ -37,33 +37,33 @@
 
 <div id="results"></div>
 
-<button onclick="loadAdmin()" style="display:block; margin:20px auto; background:none; border:none; color:#999; cursor:pointer;">Открыть статистику</button>
+<button onclick="loadAdmin()" style="display:block; margin:20px auto; background:none; border:none; color:#999; cursor:pointer; font-size:11px;">Открыть админку статистики</button>
 <div id="admin" class="card" style="display:none; overflow-x:auto;">
     <table id="admin-table">
-        <thead><tr><th>Дата</th><th>Юзер</th><th>Вещь</th><th>Реал</th><th>OK</th><th>Заметка</th></tr></thead>
+        <thead><tr><th>Дата</th><th>Юзер</th><th>Вещь</th><th>Реал Г/Т</th><th>ОК</th><th>Заметка</th></tr></thead>
         <tbody id="admin-body"></tbody>
     </table>
 </div>
 
 <script>
     async function runMatch() {
-        const p = { chest: +u_chest.value, waist: +u_waist.value, hips: +u_hips.value };
+        const p = { chest: +u_chest.value, waist: +u_waist.value, hips: +u_hips.value, height: +u_height.value };
         const res = await fetch('/api/match', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(p) });
         const data = await res.json();
         results.innerHTML = data.map(i => `
             <div class="accordion">
                 <div class="acc-header" onclick="this.parentElement.classList.toggle('open')">
-                    <span>${i.name}</span> <b>${i.score}/5</b>
+                    <span><b>${i.name}</b></span> <span>${i.score}/5</span>
                 </div>
                 <div class="acc-body">
-                    <p style="font-size:11px">Сайт: Г ${i.parsed.chest} / Т ${i.parsed.waist}</p>
-                    <div class="grid-compact">
-                        <div><label>Реал Г</label><input type="number" id="rc_${i.id}"></div>
-                        <div><label>Реал Т</label><input type="number" id="rw_${i.id}"></div>
-                        <div style="padding-top:15px"><input type="checkbox" id="fok_${i.id}"> Подошло</div>
+                    <p style="font-size:11px; color:#666;">Сайт: Грудь ${i.parsed.chest}см / Талия ${i.parsed.waist}см</p>
+                    <div class="grid-6">
+                        <div><label>Реал Грудь</label><input type="number" id="rc_${i.id}"></div>
+                        <div><label>Реал Талия</label><input type="number" id="rw_${i.id}"></div>
+                        <div style="padding-top:15px;"><input type="checkbox" id="fok_${i.id}" style="width:auto;"> <small>OK</small></div>
                     </div>
-                    <textarea id="concl_${i.id}" style="width:100%; margin-top:8px;" placeholder="Заметка"></textarea>
-                    <button class="btn" style="background:#28a745" onclick="saveStat(${i.id})">Сохранить замер</button>
+                    <textarea id="concl_${i.id}" style="margin-top:8px;" placeholder="Заметка по примерке"></textarea>
+                    <button class="btn" style="background:#28a745" onclick="saveStat(${i.id})">Сохранить тест</button>
                 </div>
             </div>
         `).join('');
@@ -72,14 +72,14 @@
     async function saveStat(id) {
         const body = {
             user_name: user_name.value, product_id: id,
-            u_chest: +u_chest.value, u_waist: +u_waist.value, u_hips: +u_hips.value,
+            u_chest: +u_chest.value, u_waist: +u_waist.value, u_hips: +u_hips.value, u_height: +u_height.value,
             real_chest: +document.getElementById('rc_'+id).value,
             real_waist: +document.getElementById('rw_'+id).value,
             fit_ok: document.getElementById('fok_'+id).checked,
             conclusion: document.getElementById('concl_'+id).value
         };
         await fetch('/api/save-test', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-        alert("Сохранено!");
+        alert("Данные сохранены!");
     }
 
     async function loadAdmin() {

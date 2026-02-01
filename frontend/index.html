@@ -3,140 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EComp — Профиль</title>
+    <title>EComp — Исследование</title>
     <style>
-        :root { --primary: #007bff; --success: #28a745; --bg: #f8f9fa; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 15px; font-size: 14px; }
-        .container { max-width: 800px; margin: auto; }
-        
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        h2 { margin: 0 0 15px 0; font-size: 18px; color: #333; }
-        
-        /* Компактная сетка параметров */
-        .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
-        .grid-6 div label { display: block; font-size: 11px; color: #666; margin-bottom: 3px; }
-        .grid-6 input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        
-        .btn { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; }
-        
-        /* Аккордеон */
-        .accordion { background: white; border-radius: 10px; margin-bottom: 8px; border: 1px solid #eee; }
-        .acc-header { padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-        .acc-body { padding: 0 15px; max-height: 0; overflow: hidden; transition: 0.3s; background: #fafafa; }
-        .accordion.open .acc-body { padding: 15px; max-height: 1000px; border-top: 1px solid #eee; }
-        
-        .badge { padding: 3px 8px; border-radius: 10px; font-size: 11px; color: white; }
-        .admin-btn { background: none; border: none; color: #ccc; cursor: pointer; display: block; margin: 30px auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-        th, td { border: 1px solid #eee; padding: 6px; text-align: left; }
+        body { font-family: system-ui; background: #f0f2f5; margin: 0; padding: 15px; color: #1c1e21; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .grid-compact { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .grid-compact label { font-size: 10px; text-transform: uppercase; color: #65676b; }
+        .grid-compact input { width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .btn { background: #007bff; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
+        .accordion { background: white; border-radius: 8px; margin-bottom: 8px; border: 1px solid #dee2e6; }
+        .acc-header { padding: 12px; cursor: pointer; display: flex; justify-content: space-between; font-weight: 500; }
+        .acc-body { padding: 0 12px; max-height: 0; overflow: hidden; transition: 0.3s; background: #f8f9fa; }
+        .accordion.open .acc-body { padding: 12px; max-height: 500px; border-top: 1px solid #dee2e6; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 4px; text-align: left; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="card">
-        <h2>Профиль</h2>
-        <div style="margin-bottom: 15px;">
-            <label style="font-size: 11px;">Имя тестера</label>
-            <input type="text" id="user_name" value="Тестер" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ddd;">
-        </div>
-        <div class="grid-6">
-            <div><label>Обхват груди</label><input type="number" id="u_chest" value="96"></div>
-            <div><label>Обхват талии</label><input type="number" id="u_waist" value="84"></div>
-            <div><label>Обхват бедер</label><input type="number" id="u_hips" value="100"></div>
-            <div><label>Рост</label><input type="number" id="u_height" value="180"></div>
-            <div><label>Ширина плеч</label><input type="number" id="u_shoulders" value="44"></div>
-            <div><label>Длина рукава</label><input type="number" id="u_sleeve" value="65"></div>
-        </div>
-        <button class="btn" onclick="calculateFit()">Рассчитать соответствие</button>
+<div class="card">
+    <h2 style="margin:0 0 10px 0; font-size: 16px;">Профиль</h2>
+    <input type="text" id="user_name" value="Тестер" style="width:100%; margin-bottom:10px; padding:6px; border-radius:4px; border:1px solid #ddd;">
+    <div class="grid-compact">
+        <div><label>Грудь</label><input type="number" id="u_chest" value="96"></div>
+        <div><label>Талия</label><input type="number" id="u_waist" value="84"></div>
+        <div><label>Бедра</label><input type="number" id="u_hips" value="100"></div>
+        <div><label>Рост</label><input type="number" id="u_height" value="180"></div>
+        <div><label>Плечи</label><input type="number" id="u_should" value="44"></div>
+        <div><label>Рукав</label><input type="number" id="u_sleeve" value="65"></div>
     </div>
+    <button class="btn" onclick="runMatch()">Рассчитать</button>
+</div>
 
-    <div id="results-area"></div>
+<div id="results"></div>
 
-    <button class="admin-btn" onclick="toggleAdmin()">Открыть статистику</button>
-    <div id="admin-panel" class="card" style="display:none; overflow-x: auto;">
-        <table id="admin-table">
-            <thead><tr><th>Дата</th><th>Юзер</th><th>Вещь</th><th>Реал</th><th>Подошло</th><th>Заметка</th></tr></thead>
-            <tbody id="admin-body"></tbody>
-        </table>
-    </div>
+<button onclick="loadAdmin()" style="display:block; margin:20px auto; background:none; border:none; color:#999; cursor:pointer;">Открыть статистику</button>
+<div id="admin" class="card" style="display:none; overflow-x:auto;">
+    <table id="admin-table">
+        <thead><tr><th>Дата</th><th>Юзер</th><th>Вещь</th><th>Реал</th><th>OK</th><th>Заметка</th></tr></thead>
+        <tbody id="admin-body"></tbody>
+    </table>
 </div>
 
 <script>
-    function toggleAcc(el) { el.parentElement.classList.toggle('open'); }
-
-    async function calculateFit() {
-        const params = {
-            chest: parseFloat(document.getElementById('u_chest').value),
-            waist: parseFloat(document.getElementById('u_waist').value),
-            hips: parseFloat(document.getElementById('u_hips').value)
-        };
-        const resArea = document.getElementById('results-area');
-        resArea.innerHTML = "<p>Поиск товаров...</p>";
-
-        const resp = await fetch('/api/match', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(params)
-        });
-        const data = await resp.json();
-        
-        resArea.innerHTML = "";
-        data.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'accordion';
-            div.innerHTML = `
-                <div class="acc-header" onclick="toggleAcc(this)">
-                    <span><strong>${item.name}</strong> <small>(${item.sku})</small></span>
-                    <span class="badge" style="background:${item.score > 3 ? '#28a745':'#dc3545'}">${item.score}/5</span>
+    async function runMatch() {
+        const p = { chest: +u_chest.value, waist: +u_waist.value, hips: +u_hips.value };
+        const res = await fetch('/api/match', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(p) });
+        const data = await res.json();
+        results.innerHTML = data.map(i => `
+            <div class="accordion">
+                <div class="acc-header" onclick="this.parentElement.classList.toggle('open')">
+                    <span>${i.name}</span> <b>${i.score}/5</b>
                 </div>
                 <div class="acc-body">
-                    <p style="font-size:12px">Парсинг: Грудь ${item.parsed_data.chest}см, Талия ${item.parsed_data.waist}см</p>
-                    <div class="grid-6">
-                        <div><label>Реал. грудь</label><input type="number" id="r_chest_${item.id}"></div>
-                        <div><label>Реал. талия</label><input type="number" id="r_waist_${item.id}"></div>
-                        <div style="display:flex; align-items:center; gap:5px; padding-top:15px">
-                            <input type="checkbox" id="f_chest_${item.id}" style="width:auto"> <small>Грудь OK</small>
-                        </div>
+                    <p style="font-size:11px">Сайт: Г ${i.parsed.chest} / Т ${i.parsed.waist}</p>
+                    <div class="grid-compact">
+                        <div><label>Реал Г</label><input type="number" id="rc_${i.id}"></div>
+                        <div><label>Реал Т</label><input type="number" id="rw_${i.id}"></div>
+                        <div style="padding-top:15px"><input type="checkbox" id="fok_${i.id}"> Подошло</div>
                     </div>
-                    <textarea id="note_${item.id}" placeholder="Заметки по примерке..." style="height:60px; margin-top:10px"></textarea>
-                    <button class="btn" style="background:#28a745; margin-top:10px" onclick="saveStat(${item.id})">Сохранить данные</button>
+                    <textarea id="concl_${i.id}" style="width:100%; margin-top:8px;" placeholder="Заметка"></textarea>
+                    <button class="btn" style="background:#28a745" onclick="saveStat(${i.id})">Сохранить замер</button>
                 </div>
-            `;
-            resArea.appendChild(div);
-        });
+            </div>
+        `).join('');
     }
 
-    async function saveStat(productId) {
-        const data = {
-            user_name: document.getElementById('user_name').value,
-            product_id: productId,
-            user_chest: parseFloat(document.getElementById('u_chest').value),
-            user_waist: parseFloat(document.getElementById('u_waist').value),
-            real_chest: parseFloat(document.getElementById(`r_chest_${productId}`).value || 0),
-            real_waist: parseFloat(document.getElementById(`r_waist_${productId}`).value || 0),
-            fit_chest: document.getElementById(`f_chest_${productId}`).checked,
-            fit_waist: true, // упростим для примера
-            conclusion: document.getElementById(`note_${productId}`).value
+    async function saveStat(id) {
+        const body = {
+            user_name: user_name.value, product_id: id,
+            u_chest: +u_chest.value, u_waist: +u_waist.value, u_hips: +u_hips.value,
+            real_chest: +document.getElementById('rc_'+id).value,
+            real_waist: +document.getElementById('rw_'+id).value,
+            fit_ok: document.getElementById('fok_'+id).checked,
+            conclusion: document.getElementById('concl_'+id).value
         };
-        const resp = await fetch('/api/save-test', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(data)
-        });
-        if(resp.ok) alert("Замер сохранен!");
+        await fetch('/api/save-test', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+        alert("Сохранено!");
     }
 
-    async function toggleAdmin() {
-        const panel = document.getElementById('admin-panel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        if(panel.style.display === 'block') {
-            const resp = await fetch('/api/admin/stats');
-            const stats = await resp.json();
-            document.getElementById('admin-body').innerHTML = stats.map(s => `
-                <tr><td>${s.date}</td><td>${s.user}</td><td>${s.product}</td><td>${s.real}</td><td>${s.fit}</td><td>${s.note}</td></tr>
-            `).join('');
-        }
+    async function loadAdmin() {
+        admin.style.display = 'block';
+        const res = await fetch('/api/admin/stats');
+        const stats = await res.json();
+        admin_body.innerHTML = stats.map(s => `<tr><td>${s.date}</td><td>${s.user}</td><td>${s.product}</td><td>${s.real}</td><td>${s.ok}</td><td>${s.note}</td></tr>`).join('');
     }
 </script>
 </body>

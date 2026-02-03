@@ -1,4 +1,4 @@
-name: Deploy to Server
+name: Full Deploy to Server
 
 on:
   push:
@@ -21,6 +21,17 @@ jobs:
           script: |
             cd ~/FIT_SYSTEM
             git pull origin main
+
+            # Backend: установка зависимостей и перезапуск
             source venv/bin/activate
             pip install -r requirements.txt
             pm2 restart fit_backend
+
+            # Frontend: если есть сборка
+            cd frontend
+            npm install
+            npm run build || echo "No build script found"
+
+            # Вернуться в корень
+            cd ~/FIT_SYSTEM
+

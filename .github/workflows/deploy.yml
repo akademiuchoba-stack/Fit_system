@@ -19,6 +19,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /ПУТЬ/К/ПРОЕКТУ/НА/СЕРВЕРЕ
+            cd ~/FIT_SYSTEM
             git pull origin main
-            # ниже мы позже подставим команды перезапуска (зависит от твоего ответа А/Б)
+            source venv/bin/activate
+            pip install -r requirements.txt
+            pm2 restart fit_backend

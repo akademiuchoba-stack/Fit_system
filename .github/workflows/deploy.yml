@@ -20,11 +20,19 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd ~/Fit_system
+
+            # Очистка: удаляем незакоммиченные и неотслеживаемые файлы
+            git reset --hard
+            git clean -fd
+
+            # Обновление проекта
             git pull origin main
 
+            # Backend
             source venv/bin/activate
             pip install -r requirements.txt
             pm2 restart fit_backend
+
 
 
             # Вернуться в корень

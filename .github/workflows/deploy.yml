@@ -22,15 +22,10 @@ jobs:
             cd ~/Fit_system
             git pull origin main
 
-            # Backend
             source venv/bin/activate
             pip install -r requirements.txt
             pm2 restart fit_backend
 
-            # Frontend
-            cd frontend
-            npm install
-            npm run build || echo "No build script found"
 
             # Вернуться в корень
             cd ~/Fit_system

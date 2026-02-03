@@ -19,19 +19,20 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ~/FIT_SYSTEM
+            cd ~/Fit_system
             git pull origin main
 
-            # Backend: установка зависимостей и перезапуск
+            # Backend
             source venv/bin/activate
             pip install -r requirements.txt
             pm2 restart fit_backend
 
-            # Frontend: если есть сборка
+            # Frontend
             cd frontend
             npm install
             npm run build || echo "No build script found"
 
             # Вернуться в корень
-            cd ~/FIT_SYSTEM
+            cd ~/Fit_system
+
 

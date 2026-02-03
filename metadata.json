@@ -1,0 +1,7 @@
+{
+  "name": "Fit_system MVP",
+  "description": "Элитная система подбора одежды с использованием вычислительной геометрии и байесовской калибровки. Интеграция с O'stin и Lamoda.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

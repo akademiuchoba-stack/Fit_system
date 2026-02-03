@@ -1,76 +1,174 @@
-from fastapi import FastAPI, Depends, Body, Header, HTTPException
+
+import os
+import logging
+import uvicorn
+from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-import os, subprocess, datetime
-from database import SessionLocal, Product, MeasurementTest, engine, Base
+from typing import List
 
-Base.metadata.create_all(bind=engine)
-app = FastAPI()
+from . import models, database, logic, parser, calibration
 
-def get_db():
-    db = SessionLocal()
-    try: yield db
-    finally: db.close()
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def calculate_match(u, p):
-    res = {}
-    score = 5
-    if p.category == "верх" and p.garment_chest:
-        diff = p.garment_chest - u.get('chest', 0)
-        if diff < 4: res['грудь'] = "Туго"; score -= 2
-        elif diff > 15: res['грудь'] = "Оверсайз"; score -= 1
-        else: res['грудь'] = "ОК"
-    if p.garment_waist:
-        diff_w = p.garment_waist - u.get('waist', 0)
-        if diff_w < 2: res['талия'] = "Туго"; score -= 2
-    return {"details": res, "score": max(0, score)}
+app = FastAPI(title="Fit_system API", version="1.1.0")
 
-@app.get("/api/products")
-async def list_products(db: Session = Depends(get_db)):
-    return db.query(Product).all()
+# CORS для гибкости (разрешаем всё для MVP, сузим позже)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.post("/api/match")
-async def match_products(params: dict = Body(...), db: Session = Depends(get_db)):
-    products = db.query(Product).all()
-    out = []
-    for p in products:
-        m = calculate_match(params, p)
-        out.append({
-            "id": p.id, "name": p.name, "sku": p.sku, "size": p.size,
-            "category": p.category, "image": p.image_url,
-            "score": m['score'], "details": m['details'],
-            "parsed": {"chest": p.garment_chest, "waist": p.garment_waist, "hips": p.garment_hips}
-        })
-    return sorted(out, key=lambda x: x['score'], reverse=True)
-
-@app.post("/api/save-test")
-async def save_test(data: dict = Body(...), db: Session = Depends(get_db)):
-    test = MeasurementTest(
-        user_name=data['user_name'], product_id=data['product_id'],
-        u_chest=data['u_chest'], u_waist=data['u_waist'], u_hips=data['u_hips'],
-        real_chest=data.get('real_chest'), real_waist=data.get('real_waist'),
-        real_hips=data.get('real_hips'), fit_ok=data['fit_ok'], conclusion=data['conclusion']
-    )
-    db.add(test); db.commit(); return {"status": "ok"}
-
-@app.get("/api/admin/stats")
-async def get_stats(db: Session = Depends(get_db)):
-    tests = db.query(MeasurementTest).all()
-    res = []
-    for t in tests:
-        p = db.query(Product).filter(Product.id==t.product_id).first()
-        res.append({
-            "date": t.timestamp.strftime("%d.%m %H:%M"), "user": t.user_name,
-            "product": f"{p.name if p else 'Удален'} ({p.size if p else '?'})", 
-            "ok": "✓" if t.fit_ok else "✗", "note": t.conclusion
-        })
-    return res
-
-# Пути к статике
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_PATH = os.path.join(BASE_DIR, "frontend")
+FRONTEND_DIR = BASE_DIR 
 
-app.mount("/static", StaticFiles(directory=FRONTEND_PATH), name="static")
+# Инициализация БД
+models.Base.metadata.create_all(bind=database.engine)
+
+@app.get("/api/items")
+def get_items(db: Session = Depends(database.get_db)):
+    try:
+        items = db.query(models.Garment).filter(models.Garment.in_stock == True).all()
+        return items
+    except Exception as e:
+        logger.error(f"Error fetching items: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
+@app.post("/api/calculate")
+def calculate_for_user(req: models.FitRequest, db: Session = Depends(database.get_db)):
+    logger.info(f"Calculating fit for user: {req.user.name}")
+    items = db.query(models.Garment).filter(models.Garment.in_stock == True).all()
+    results = []
+    user_data = req.user.dict()
+    
+    for item in items:
+        best_size = None
+        best_score = -1
+        
+        # Проходим по всем размерам в JSON-метриках товара
+        for size_label, m in item.metrics.items():
+            fit = logic.calculate_fit(user_data, m)
+            if fit['score'] > best_score:
+                best_score = fit['score']
+                best_size = {
+                    "size": size_label,
+                    "fit": fit,
+                    "item_id": item.id,
+                    "sku": item.sku,
+                    "name": item.name,
+                    "image": item.image_url,
+                    "platform": item.platform
+                }
+        if best_size:
+            results.append(best_size)
+            
+    results.sort(key=lambda x: x['fit']['score'], reverse=True)
+    return results
+
+@app.post("/api/feedback")
+def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
+    logger.info(f"Feedback received for item {fb.garment_id} from {fb.user_id}")
+    new_fb = models.Feedback(
+        garment_id=fb.garment_id,
+        user_id=fb.user_id,
+        size_selected=fb.size_selected,
+        judgment=fb.judgment,
+        real_measurements=fb.real_measurements
+    )
+    db.add(new_fb)
+    
+    if fb.real_measurements:
+        garment = db.query(models.Garment).filter(models.Garment.id == fb.garment_id).first()
+        prior = db.query(models.Prior).filter(
+            models.Prior.garment_id == fb.garment_id, 
+            models.Prior.size_label == fb.size_selected
+        ).first()
+        
+        if prior and 'chest' in fb.real_measurements:
+            new_mu, new_sigma = calibration.bayesian_update(
+                prior.mu_chest, prior.sigma_chest, fb.real_measurements['chest']
+            )
+            prior.mu_chest = new_mu
+            prior.sigma_chest = new_sigma
+            
+            updated_metrics = dict(garment.metrics)
+            updated_metrics[fb.size_selected]['chest'] = new_mu
+            garment.metrics = updated_metrics
+            logger.info(f"Bayesian update completed for {garment.sku} size {fb.size_selected}")
+            
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/admin/update-db")
+async def update_database(db: Session = Depends(database.get_db)):
+    # В будущем здесь будет вызов p.parse_lamoda() и p.check_ostin_inventory()
+    # Сейчас инжектируем актуальный ассортимент для Ангарска
+    mock_items = [
+        {
+            "sku": "OST-99122",
+            "name": "Рубашка Oxford Regular",
+            "platform": "ostin",
+            "image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=800",
+            "metrics": {
+                "M": {"chest": 54, "shoulder": 46, "sleeve": 64, "length": 72},
+                "L": {"chest": 57, "shoulder": 48, "sleeve": 65, "length": 74}
+            }
+        },
+        {
+            "sku": "LAM-77332",
+            "name": "Свитшот Premium Cotton",
+            "platform": "lamoda",
+            "image_url": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&q=80&w=800",
+            "metrics": {
+                "S": {"chest": 52, "shoulder": 44, "sleeve": 62, "length": 68},
+                "M": {"chest": 55, "shoulder": 45, "sleeve": 64, "length": 70}
+            }
+        },
+        {
+            "sku": "OST-55411",
+            "name": "Куртка демисезонная Loft",
+            "platform": "ostin",
+            "image_url": "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&q=80&w=800",
+            "metrics": {
+                "M": {"chest": 58, "shoulder": 48, "sleeve": 66, "length": 75},
+                "L": {"chest": 61, "shoulder": 50, "sleeve": 67, "length": 77}
+            }
+        }
+    ]
+    
+    for item_data in mock_items:
+        existing = db.query(models.Garment).filter(models.Garment.sku == item_data['sku']).first()
+        if not existing:
+            new_item = models.Garment(**item_data)
+            db.add(new_item)
+            db.flush()
+            for size, m in item_data['metrics'].items():
+                new_prior = models.Prior(
+                    garment_id=new_item.id,
+                    size_label=size,
+                    mu_chest=m['chest'],
+                    mu_sleeve=m['sleeve']
+                )
+                db.add(new_prior)
+    db.commit()
+    return {"status": "Matrix Updated: 3 SKUs Active in Angarsk (Festival Mall)"}
+
 @app.get("/")
-async def index(): return FileResponse(os.path.join(FRONTEND_PATH, "index.html"))
+async def read_index():
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="Frontend index.html not found")
+
+# Монтируем корневой каталог как статику для доступа к index.tsx и ресурсам
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+if __name__ == "__main__":
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

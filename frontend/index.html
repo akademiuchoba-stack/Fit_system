@@ -1,120 +1,142 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EComp — Помощник в магазине</title>
+    <title>Fit_system | Элитный подбор одежды</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
     <style>
-        :root { --accent: #007aff; --bg: #f2f2f7; --card-bg: #ffffff; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; padding: 10px; }
-        .card { background: var(--card-bg); border-radius: 12px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 12px; }
-        .profile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .profile-grid label { font-size: 10px; color: #8e8e93; display: block; }
-        .profile-grid input { width: 100%; border: 1px solid #d1d1d6; border-radius: 6px; padding: 6px; font-size: 14px; }
-        
-        .product-card { background: white; border-radius: 12px; margin-bottom: 10px; overflow: hidden; border: 1px solid #e5e5ea; }
-        .product-main { display: flex; align-items: center; padding: 10px; cursor: pointer; }
-        .product-img { width: 50px; height: 70px; object-fit: cover; border-radius: 4px; background: #eee; }
-        .product-info { flex: 1; padding-left: 12px; }
-        .product-name { font-weight: 600; font-size: 14px; margin: 0; }
-        .size-badge { background: #e9e9eb; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-        .score-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
-
-        .product-details { max-height: 0; overflow: hidden; transition: 0.3s; background: #fafafa; }
-        .product-card.open .product-details { max-height: 800px; padding: 15px; border-top: 1px solid #e5e5ea; }
-        
-        .real-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        .btn { background: var(--accent); color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; width: 100%; margin-top: 10px; }
-        table { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 5px; text-align: left; }
+        body { font-family: 'Inter', sans-serif; }
+        .bg-mesh {
+            background-color: #f8fafc;
+            background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.05) 0, transparent 50%), 
+                              radial-gradient(at 50% 0%, rgba(139, 92, 246, 0.05) 0, transparent 50%);
+        }
+        input:focus { outline: none; }
     </style>
 </head>
-<body>
+<body class="bg-mesh min-h-screen text-gray-900 overflow-x-hidden">
 
-<div class="card">
-    <h3 style="margin: 0 0 10px 0; font-size: 16px;">Профиль</h3>
-    <input type="text" id="user_name" value="Тестер" style="width:100%; margin-bottom:10px; padding:6px; border:1px solid #ddd; border-radius:6px;">
-    <div class="profile-grid">
-        <div><label>Грудь</label><input type="number" id="u_chest" value="96"></div>
-        <div><label>Талия</label><input type="number" id="u_waist" value="84"></div>
-        <div><label>Бедра</label><input type="number" id="u_hips" value="100"></div>
-    </div>
-    <button class="btn" onclick="runMatch()">Найти размеры в магазине</button>
-</div>
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-200">F</div>
+                <h1 class="text-2xl font-black text-gray-900 tracking-tighter uppercase">Fit_system <span class="text-indigo-600">.</span></h1>
+            </div>
+            <nav class="hidden md:flex items-center gap-8">
+                <button onclick="showInput()" class="text-sm font-bold text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">Подбор</button>
+                <button onclick="showAdmin()" class="text-sm font-bold text-gray-400 hover:text-indigo-600 transition-colors uppercase tracking-widest">Admin</button>
+                <div class="h-6 w-px bg-gray-200"></div>
+                <div class="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    Ангарск: ТРЦ Фестиваль
+                </div>
+            </nav>
+        </div>
+    </header>
 
-<div id="results"></div>
-
-<button onclick="loadAdmin()" style="display:block; margin:20px auto; color:#8e8e93; border:none; background:none; font-size:12px; width:100%;">Открыть историю замеров</button>
-<div id="admin" class="card" style="display:none; overflow-x:auto;">
-    <table id="admin-table">
-        <thead><tr><th>Дата</th><th>Вещь</th><th>OK</th></tr></thead>
-        <tbody id="admin-body"></tbody>
-    </table>
-</div>
-
-<script>
-    async function runMatch() {
-        const p = { chest: +u_chest.value, waist: +u_waist.value, hips: +u_hips.value };
-        const res = await fetch('/api/match', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(p) });
-        const data = await res.json();
+    <main class="max-w-7xl mx-auto px-6 py-12">
         
-        results.innerHTML = data.map(i => {
-            const isTop = i.category === 'верх';
-            const color = i.score > 3 ? '#34c759' : (i.score > 1 ? '#ffcc00' : '#ff3b30');
-            return `
-            <div class="product-card">
-                <div class="product-main" onclick="this.parentElement.classList.toggle('open')">
-                    <img src="${i.image || ''}" class="product-img">
-                    <div class="product-info">
-                        <p class="product-name">${i.name}</p>
-                        <div style="margin-top:4px;">
-                            <span class="size-badge">${i.size}</span>
-                            <span style="margin-left:10px; font-size:12px; color:#8e8e93;">
-                                <span class="score-dot" style="background:${color}"></span>Подходит на ${i.score}/5
-                            </span>
-                        </div>
+        <!-- Step 1: Input Form -->
+        <section id="input-section" class="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-black mb-4 tracking-tight">Создайте цифровой профиль тела</h2>
+                <p class="text-gray-500 text-lg">Наши алгоритмы вычислительной геометрии рассчитают идеальную посадку на основе 12 антропометрических точек.</p>
+            </div>
+            
+            <form id="metrics-form" class="bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-indigo-100/50 border border-gray-50 space-y-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Идентификатор</label>
+                        <input type="text" name="name" required class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all text-lg font-bold" placeholder="Алексей">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Биологический пол</label>
+                        <select name="gender" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all text-lg font-bold appearance-none">
+                            <option value="male">Мужской</option>
+                            <option value="female">Женский</option>
+                        </select>
                     </div>
                 </div>
-                <div class="product-details">
-                    <div style="font-size:11px; color:#8e8e93; margin-bottom:10px;">
-                        Парсинг: ${isTop ? 'Грудь '+i.parsed.chest+' ' : ''}Талия ${i.parsed.waist}
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Рост</label>
+                        <input type="number" name="height" value="182" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
                     </div>
-                    <div class="real-grid">
-                        ${isTop ? `<div><label>Реал Грудь</label><input type="number" id="rc_${i.id}"></div>` : ''}
-                        <div><label>Реал Талия</label><input type="number" id="rw_${i.id}"></div>
-                        <div><label>Реал Бедра</label><input type="number" id="rh_${i.id}"></div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Грудь</label>
+                        <input type="number" name="chest" value="104" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
                     </div>
-                    <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
-                        <input type="checkbox" id="fok_${i.id}" style="width:20px; height:20px;">
-                        <label style="font-size:14px; font-weight:500;">Вещь подошла идеально</label>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Плечи</label>
+                        <input type="number" name="shoulders" value="50" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
                     </div>
-                    <textarea id="concl_${i.id}" style="margin-top:10px; width:100%; border-radius:6px; border:1px solid #ddd; padding:8px;" placeholder="Заметки по ткани, длине..."></textarea>
-                    <button class="btn" style="background:#34c759" onclick="saveStat(${i.id})">Сохранить замер</button>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Талия</label>
+                        <input type="number" name="waist" value="88" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Длина руки</label>
+                        <input type="number" name="arm_length" value="64" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Бедра</label>
+                        <input type="number" name="hips" value="98" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-5 bg-gray-900 text-white font-black rounded-2xl hover:bg-indigo-600 transition-all shadow-xl shadow-gray-200 text-lg uppercase tracking-widest">
+                    Анализировать Ассортимент
+                </button>
+            </form>
+        </section>
+
+        <!-- Step 2: Results -->
+        <section id="results-section" class="hidden animate-in fade-in duration-1000">
+            <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+                <div>
+                    <h2 class="text-5xl font-black tracking-tighter">Ваш гардероб <span class="text-indigo-600">.</span></h2>
+                    <p class="text-gray-400 mt-2 font-medium uppercase text-xs tracking-widest">Найдено в наличии: Ангарск, ТРЦ Фестиваль</p>
+                </div>
+                <button onclick="showInput()" class="px-6 py-3 bg-white border border-gray-100 rounded-xl font-bold text-gray-500 hover:text-indigo-600 shadow-sm transition-all">Сбросить фильтры</button>
+            </div>
+            <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                <!-- Cards -->
+            </div>
+        </section>
+
+        <!-- Admin -->
+        <section id="admin-section" class="hidden max-w-2xl mx-auto">
+            <div class="bg-white p-12 rounded-[2.5rem] shadow-2xl border border-gray-50">
+                <h2 class="text-3xl font-black mb-8">Мастер-контроль БД</h2>
+                <div class="space-y-6">
+                    <div class="p-6 bg-gray-50 rounded-2xl border border-gray-100">
+                        <p class="text-sm text-gray-500 mb-4 font-medium leading-relaxed">Запуск парсера инициирует асинхронный сбор данных с O'stin и Lamoda, выполнение fuzzy-matching и расчет начальных Priors для байесовского ядра.</p>
+                        <button onclick="updateDB()" class="w-full py-4 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-colors">Обновить Товарную Матрицу</button>
+                    </div>
+                    <div id="admin-status" class="text-center font-mono text-xs text-indigo-400 font-bold"></div>
                 </div>
             </div>
-        `}).join('');
-    }
+        </section>
 
-    async function saveStat(id) {
-        const body = {
-            user_name: user_name.value, product_id: id,
-            u_chest: +u_chest.value, u_waist: +u_waist.value, u_hips: +u_hips.value,
-            real_chest: +document.getElementById('rc_'+id)?.value || 0,
-            real_waist: +document.getElementById('rw_'+id)?.value || 0,
-            real_hips: +document.getElementById('rh_'+id)?.value || 0,
-            fit_ok: document.getElementById('fok_'+id).checked,
-            conclusion: document.getElementById('concl_'+id).value
-        };
-        await fetch('/api/save-test', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
-        alert("Замер сохранен!");
-    }
+    </main>
 
-    async function loadAdmin() {
-        admin.style.display = 'block';
-        const res = await fetch('/api/admin/stats');
-        const stats = await res.json();
-        admin_body.innerHTML = stats.map(s => `<tr><td>${s.date}</td><td>${s.product}</td><td>${s.ok}</td></tr>`).join('');
-    }
-</script>
+    <!-- Detail Modal -->
+    <div id="modal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-5xl rounded-[3rem] overflow-hidden max-h-[95vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
+            <div id="modal-content" class="p-10 md:p-14">
+                <!-- Content -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

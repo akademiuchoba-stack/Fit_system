@@ -47,6 +47,8 @@
             </div>
             
             <form id="metrics-form" class="bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-indigo-100/50 border border-gray-50 space-y-8">
+                
+                <!-- Name + Gender -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-2">
                         <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Идентификатор</label>
@@ -61,6 +63,7 @@
                     </div>
                 </div>
 
+                <!-- Height / Chest / Shoulders / Waist -->
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div class="space-y-2">
                         <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Рост</label>
@@ -80,7 +83,8 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <!-- Arm length / Hips / Leg length -->
+                <div class="grid grid-cols-3 gap-4">
                     <div class="space-y-2">
                         <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Длина руки</label>
                         <input type="number" name="arm_length" value="64" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
@@ -88,6 +92,10 @@
                     <div class="space-y-2">
                         <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Бедра</label>
                         <input type="number" name="hips" value="98" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Длина ноги</label>
+                        <input type="number" name="leg_length" value="90" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition-all font-bold">
                     </div>
                 </div>
 
@@ -97,7 +105,7 @@
             </form>
         </section>
 
-        <!-- Step 2: Results -->
+        <!-- Results -->
         <section id="results-section" class="hidden animate-in fade-in duration-1000">
             <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
                 <div>
@@ -106,9 +114,7 @@
                 </div>
                 <button onclick="showInput()" class="px-6 py-3 bg-white border border-gray-100 rounded-xl font-bold text-gray-500 hover:text-indigo-600 shadow-sm transition-all">Сбросить фильтры</button>
             </div>
-            <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                <!-- Cards -->
-            </div>
+            <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"></div>
         </section>
 
         <!-- Admin -->
@@ -130,14 +136,12 @@
     <!-- Detail Modal -->
     <div id="modal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-5xl rounded-[3rem] overflow-hidden max-h-[95vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
-            <div id="modal-content" class="p-10 md:p-14">
-                <!-- Content -->
-            </div>
+            <div id="modal-content" class="p-10 md:p-14"></div>
         </div>
     </div>
 
-    <!-- FIXED: правильный путь к JS -->
     <script type="module" src="/static/index.js"></script>
 </body>
 </html>
+
 

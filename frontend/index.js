@@ -1,4 +1,3 @@
-
 /**
  * Fit_system Frontend Logic
  * Handling UI state, API calls, and reactive rendering.
@@ -34,7 +33,6 @@ class FitApp {
                 const num = Number(data[k]);
                 this.currentUser[k] = isNaN(num) ? null : num;
             }
-
         }
 
         try {
@@ -115,10 +113,14 @@ class FitApp {
             <div class="flex justify-between items-start mb-8">
                 <div>
                     <h2 class="text-3xl font-black text-gray-900">${res.name}</h2>
-                    <p class="text-gray-400 font-mono text-sm tracking-tighter uppercase mt-1">SKU: ${res.sku} | Location: Angarsk, Festival</p>
+                    <p class="text-gray-400 font-mono text-sm tracking-tighter uppercase mt-1">
+                        SKU: ${res.sku} | Location: Angarsk, Festival
+                    </p>
                 </div>
                 <button onclick="window.app.closeModal()" class="p-3 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors">
-                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
                 </button>
             </div>
 
@@ -132,7 +134,9 @@ class FitApp {
                 </div>
                 
                 <div class="flex flex-col h-full">
-                    <h3 class="font-black text-gray-400 uppercase text-[11px] tracking-widest mb-6">Computational Geometry Analysis</h3>
+                    <h3 class="font-black text-gray-400 uppercase text-[11px] tracking-widest mb-6">
+                        Computational Geometry Analysis
+                    </h3>
                     <div class="space-y-6 flex-grow">
                         ${this.renderMetricRow('Полуобхват груди (Вещь)', mc.garment_chest, 'см')}
                         ${this.renderMetricRow('Ваш полуобхват (Тело)', mc.user_chest_half, 'см', true)}
@@ -142,29 +146,43 @@ class FitApp {
 
                     <div class="mt-10 pt-8 border-t border-gray-100">
                         <h3 class="font-bold text-gray-900 mb-4">Байесовская калибровка</h3>
-                        <p class="text-xs text-gray-500 mb-6 leading-relaxed">Ваш отзыв поможет алгоритму точнее рассчитывать посадку для жителей Ангарска.</p>
+                        <p class="text-xs text-gray-500 mb-6 leading-relaxed">
+                            Ваш отзыв поможет алгоритму точнее рассчитывать посадку для жителей Ангарска.
+                        </p>
+
                         <div class="grid grid-cols-3 gap-3">
-                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', 0)" class="flex flex-col items-center py-4 bg-emerald-50 text-emerald-700 rounded-2xl border-2 border-transparent hover:border-emerald-500 transition-all group">
+                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', 0)"
+                                class="flex flex-col items-center py-4 bg-emerald-50 text-emerald-700 rounded-2xl border-2 border-transparent hover:border-emerald-500 transition-all group">
                                 <span class="text-2xl mb-1 group-hover:scale-125 transition-transform">🎯</span>
                                 <span class="text-[10px] font-bold uppercase">В точку</span>
                             </button>
-                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', 1)" class="flex flex-col items-center py-4 bg-amber-50 text-amber-700 rounded-2xl border-2 border-transparent hover:border-amber-500 transition-all group">
+
+                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', 1)"
+                                class="flex flex-col items-center py-4 bg-amber-50 text-amber-700 rounded-2xl border-2 border-transparent hover:border-amber-500 transition-all group">
                                 <span class="text-2xl mb-1 group-hover:scale-125 transition-transform">🤏</span>
                                 <span class="text-[10px] font-bold uppercase">Маловато</span>
                             </button>
-                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', -1)" class="flex flex-col items-center py-4 bg-rose-50 text-rose-700 rounded-2xl border-2 border-transparent hover:border-rose-500 transition-all group">
+
+                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', -1)"
+                                class="flex flex-col items-center py-4 bg-rose-50 text-rose-700 rounded-2xl border-2 border-transparent hover:border-rose-500 transition-all group">
                                 <span class="text-2xl mb-1 group-hover:scale-125 transition-transform">🧥</span>
                                 <span class="text-[10px] font-bold uppercase">Велико</span>
                             </button>
                         </div>
+
                         <div class="mt-6">
-                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Уточнить замер (опционально)</label>
-                            <input id="real-chest" type="number" step="0.5" class="w-full p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500" placeholder="Введите реальную ширину в см...">
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">
+                                Уточнить замер (опционально)
+                            </label>
+                            <input id="real-chest" type="number" step="0.5"
+                                class="w-full p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500"
+                                placeholder="Введите реальную ширину в см...">
                         </div>
                     </div>
                 </div>
             </div>
         `;
+
         modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
     }
@@ -211,6 +229,7 @@ class FitApp {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+
             alert('Данные приняты. Алгоритм откалиброван!');
             this.closeModal();
         } catch (e) {
@@ -222,6 +241,7 @@ class FitApp {
         const input = document.getElementById('input-section');
         const results = document.getElementById('results-section');
         const admin = document.getElementById('admin-section');
+
         if (input) input.classList.remove('hidden');
         if (results) results.classList.add('hidden');
         if (admin) admin.classList.add('hidden');
@@ -231,6 +251,7 @@ class FitApp {
         const input = document.getElementById('input-section');
         const results = document.getElementById('results-section');
         const admin = document.getElementById('admin-section');
+
         if (input) input.classList.add('hidden');
         if (results) results.classList.add('hidden');
         if (admin) admin.classList.remove('hidden');
@@ -239,6 +260,7 @@ class FitApp {
     async updateDB() {
         const status = document.getElementById('admin-status');
         if (status) status.innerText = 'Запуск кластеризации и парсинга...';
+
         try {
             const response = await fetch('/api/admin/update-db', { method: 'POST' });
             const data = await response.json();

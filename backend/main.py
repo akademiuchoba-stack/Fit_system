@@ -34,7 +34,7 @@ app.add_middleware(
 # ПУТИ
 # -----------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = BASE_DIR / "frontend"
+FRONTEND_DIR = BASE_DIR 
 INDEX_FILE = FRONTEND_DIR / "index.html"
 
 # -----------------------------

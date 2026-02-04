@@ -1,23 +1,27 @@
-
 import os
 import logging
+from pathlib import Path
+
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
 
 from . import models, database, logic, parser, calibration
 
-# Настройка логирования
+# -----------------------------
+# ЛОГИРОВАНИЕ
+# -----------------------------
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# -----------------------------
+# FASTAPI
+# -----------------------------
 app = FastAPI(title="Fit_system API", version="1.1.0")
 
-# CORS для гибкости (разрешаем всё для MVP, сузим позже)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,12 +30,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_DIR = BASE_DIR 
+# -----------------------------
+# ПУТИ
+# -----------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+INDEX_FILE = FRONTEND_DIR / "index.html"
 
-# Инициализация БД
+# -----------------------------
+# ИНИЦИАЛИЗАЦИЯ БД
+# -----------------------------
 models.Base.metadata.create_all(bind=database.engine)
 
+# -----------------------------
+# API ЭНДПОИНТЫ
+# -----------------------------
 @app.get("/api/items")
 def get_items(db: Session = Depends(database.get_db)):
     try:
@@ -41,18 +54,18 @@ def get_items(db: Session = Depends(database.get_db)):
         logger.error(f"Error fetching items: {e}")
         raise HTTPException(status_code=500, detail="Database error")
 
+
 @app.post("/api/calculate")
 def calculate_for_user(req: models.FitRequest, db: Session = Depends(database.get_db)):
     logger.info(f"Calculating fit for user: {req.user.name}")
     items = db.query(models.Garment).filter(models.Garment.in_stock == True).all()
     results = []
     user_data = req.user.dict()
-    
+
     for item in items:
         best_size = None
         best_score = -1
-        
-        # Проходим по всем размерам в JSON-метриках товара
+
         for size_label, m in item.metrics.items():
             fit = logic.calculate_fit(user_data, m)
             if fit['score'] > best_score:
@@ -68,9 +81,10 @@ def calculate_for_user(req: models.FitRequest, db: Session = Depends(database.ge
                 }
         if best_size:
             results.append(best_size)
-            
+
     results.sort(key=lambda x: x['fit']['score'], reverse=True)
     return results
+
 
 @app.post("/api/feedback")
 def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
@@ -83,33 +97,32 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
         real_measurements=fb.real_measurements
     )
     db.add(new_fb)
-    
+
     if fb.real_measurements:
         garment = db.query(models.Garment).filter(models.Garment.id == fb.garment_id).first()
         prior = db.query(models.Prior).filter(
-            models.Prior.garment_id == fb.garment_id, 
+            models.Prior.garment_id == fb.garment_id,
             models.Prior.size_label == fb.size_selected
         ).first()
-        
+
         if prior and 'chest' in fb.real_measurements:
             new_mu, new_sigma = calibration.bayesian_update(
                 prior.mu_chest, prior.sigma_chest, fb.real_measurements['chest']
             )
             prior.mu_chest = new_mu
             prior.sigma_chest = new_sigma
-            
+
             updated_metrics = dict(garment.metrics)
             updated_metrics[fb.size_selected]['chest'] = new_mu
             garment.metrics = updated_metrics
             logger.info(f"Bayesian update completed for {garment.sku} size {fb.size_selected}")
-            
+
     db.commit()
     return {"status": "success"}
 
+
 @app.post("/api/admin/update-db")
 async def update_database(db: Session = Depends(database.get_db)):
-    # В будущем здесь будет вызов p.parse_lamoda() и p.check_ostin_inventory()
-    # Сейчас инжектируем актуальный ассортимент для Ангарска
     mock_items = [
         {
             "sku": "OST-99122",
@@ -142,7 +155,7 @@ async def update_database(db: Session = Depends(database.get_db)):
             }
         }
     ]
-    
+
     for item_data in mock_items:
         existing = db.query(models.Garment).filter(models.Garment.sku == item_data['sku']).first()
         if not existing:
@@ -157,18 +170,23 @@ async def update_database(db: Session = Depends(database.get_db)):
                     mu_sleeve=m['sleeve']
                 )
                 db.add(new_prior)
+
     db.commit()
     return {"status": "Matrix Updated: 3 SKUs Active in Angarsk (Festival Mall)"}
 
+# -----------------------------
+# FRONTEND
+# -----------------------------
 @app.get("/")
 async def read_index():
-    index_path = os.path.join(FRONTEND_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
+    if INDEX_FILE.exists():
+        return FileResponse(INDEX_FILE)
     raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
-# Монтируем корневой каталог как статику для доступа к index.tsx и ресурсам
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
+# -----------------------------
+# LOCAL RUN
+# -----------------------------
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

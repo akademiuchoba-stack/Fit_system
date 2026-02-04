@@ -25,5 +25,3 @@ python3 backend/seed_db.py
 
 # 5. Запуск сервера
 echo "✅ Readiness check complete."
-echo "🌐 Application will be available at http://109.73.193.225:8000"
-uvicorn backend.main:app --host 0.0.0.0 --port 8000

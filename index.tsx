@@ -4,31 +4,15 @@
  * Handling UI state, API calls, and reactive rendering.
  */
 
-interface FitResult {
-    item_id: number;
-    sku: string;
-    name: string;
-    image: string;
-    platform: string;
-    size: string;
-    fit: {
-        score: number;
-        verdict: string;
-        details: string;
-        metrics_comparison: any;
-    };
-}
-
 class FitApp {
-    private currentUser: any = null;
-    private results: FitResult[] = [];
-
     constructor() {
+        this.currentUser = null;
+        this.results = [];
         this.initEventListeners();
     }
 
-    private initEventListeners() {
-        const form = document.getElementById('metrics-form') as HTMLFormElement;
+    initEventListeners() {
+        const form = document.getElementById('metrics-form');
         if (form) {
             form.onsubmit = async (e) => {
                 e.preventDefault();
@@ -37,14 +21,18 @@ class FitApp {
         }
     }
 
-    private async handleFormSubmit(form: HTMLFormElement) {
+    async handleFormSubmit(form) {
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
-        
+
         // Преобразование типов
         this.currentUser = {};
         for (let k in data) {
-            this.currentUser[k] = (k !== 'name' && k !== 'gender') ? parseFloat(data[k] as string) : data[k];
+            if (k !== 'name' && k !== 'gender') {
+                this.currentUser[k] = parseFloat(data[k]);
+            } else {
+                this.currentUser[k] = data[k];
+            }
         }
 
         try {
@@ -55,7 +43,7 @@ class FitApp {
             });
 
             if (!response.ok) throw new Error('Ошибка расчета');
-            
+
             this.results = await response.json();
             this.renderResults();
         } catch (error) {
@@ -64,7 +52,7 @@ class FitApp {
         }
     }
 
-    private renderResults() {
+    renderResults() {
         const grid = document.getElementById('results-grid');
         const inputSec = document.getElementById('input-section');
         const resultSec = document.getElementById('results-section');
@@ -72,12 +60,15 @@ class FitApp {
         if (!grid || !inputSec || !resultSec) return;
 
         grid.innerHTML = '';
-        this.results.forEach(res => {
+        this.results.forEach((res) => {
             const card = document.createElement('div');
             card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100';
             card.onclick = () => this.openDetail(res);
 
-            const scoreColor = res.fit.score > 85 ? 'bg-emerald-500' : (res.fit.score > 70 ? 'bg-amber-500' : 'bg-rose-500');
+            const scoreColor =
+                res.fit.score > 85 ? 'bg-emerald-500' :
+                res.fit.score > 70 ? 'bg-amber-500' :
+                'bg-rose-500';
 
             card.innerHTML = `
                 <div class="relative aspect-[3/4] overflow-hidden">
@@ -111,10 +102,12 @@ class FitApp {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    public openDetail(res: FitResult) {
+    openDetail(res) {
         const modal = document.getElementById('modal');
         const content = document.getElementById('modal-content');
         if (!modal || !content) return;
+
+        const mc = res.fit.metrics_comparison || {};
 
         content.innerHTML = `
             <div class="flex justify-between items-start mb-8">
@@ -139,10 +132,10 @@ class FitApp {
                 <div class="flex flex-col h-full">
                     <h3 class="font-black text-gray-400 uppercase text-[11px] tracking-widest mb-6">Computational Geometry Analysis</h3>
                     <div class="space-y-6 flex-grow">
-                        ${this.renderMetricRow('Полуобхват груди (Вещь)', res.fit.metrics_comparison.garment_chest, 'см')}
-                        ${this.renderMetricRow('Ваш полуобхват (Тело)', res.fit.metrics_comparison.user_chest_half, 'см', true)}
-                        ${this.renderMetricRow('Рукав (Dropped Shoulder Corr.)', res.fit.metrics_comparison.effective_sleeve, 'см')}
-                        ${this.renderMetricRow('Ваша длина руки', res.fit.metrics_comparison.user_arm, 'см', true)}
+                        ${this.renderMetricRow('Полуобхват груди (Вещь)', mc.garment_chest, 'см')}
+                        ${this.renderMetricRow('Ваш полуобхват (Тело)', mc.user_chest_half, 'см', true)}
+                        ${this.renderMetricRow('Рукав (Dropped Shoulder Corr.)', mc.effective_sleeve, 'см')}
+                        ${this.renderMetricRow('Ваша длина руки', mc.user_arm, 'см', true)}
                     </div>
 
                     <div class="mt-10 pt-8 border-t border-gray-100">
@@ -174,7 +167,16 @@ class FitApp {
         document.body.style.overflow = 'hidden';
     }
 
-    private renderMetricRow(label: string, value: number, unit: string, isUser: boolean = false) {
+    renderMetricRow(label, value, unit, isUser) {
+        if (value === undefined || value === null || isNaN(value)) {
+            return `
+                <div class="flex items-end justify-between border-b border-gray-50 pb-3 opacity-50">
+                    <span class="text-sm ${isUser ? 'text-gray-400' : 'text-gray-600 font-medium'}">${label}</span>
+                    <span class="font-mono text-lg font-bold ${isUser ? 'text-gray-400' : 'text-indigo-600'}">—</span>
+                </div>
+            `;
+        }
+
         return `
             <div class="flex items-end justify-between border-b border-gray-50 pb-3">
                 <span class="text-sm ${isUser ? 'text-gray-400' : 'text-gray-600 font-medium'}">${label}</span>
@@ -183,16 +185,19 @@ class FitApp {
         `;
     }
 
-    public closeModal() {
-        document.getElementById('modal')?.classList.add('hidden');
+    closeModal() {
+        const modal = document.getElementById('modal');
+        if (modal) modal.classList.add('hidden');
         document.body.style.overflow = 'auto';
     }
 
-    public async submitFeedback(itemId: number, size: string, judgment: number) {
-        const realChest = (document.getElementById('real-chest') as HTMLInputElement)?.value;
+    async submitFeedback(itemId, size, judgment) {
+        const realChestInput = document.getElementById('real-chest');
+        const realChest = realChestInput ? realChestInput.value : null;
+
         const payload = {
             garment_id: itemId,
-            user_id: this.currentUser?.name || "anonymous",
+            user_id: (this.currentUser && this.currentUser.name) || 'anonymous',
             size_selected: size,
             judgment: judgment,
             real_measurements: realChest ? { chest: parseFloat(realChest) } : null
@@ -211,29 +216,40 @@ class FitApp {
         }
     }
 
-    public showInput() {
-        document.getElementById('input-section')?.classList.remove('hidden');
-        document.getElementById('results-section')?.classList.add('hidden');
-        document.getElementById('admin-section')?.classList.add('hidden');
+    showInput() {
+        const input = document.getElementById('input-section');
+        const results = document.getElementById('results-section');
+        const admin = document.getElementById('admin-section');
+        if (input) input.classList.remove('hidden');
+        if (results) results.classList.add('hidden');
+        if (admin) admin.classList.add('hidden');
     }
 
-    public showAdmin() {
-        document.getElementById('input-section')?.classList.add('hidden');
-        document.getElementById('results-section')?.classList.add('hidden');
-        document.getElementById('admin-section')?.classList.remove('hidden');
+    showAdmin() {
+        const input = document.getElementById('input-section');
+        const results = document.getElementById('results-section');
+        const admin = document.getElementById('admin-section');
+        if (input) input.classList.add('hidden');
+        if (results) results.classList.add('hidden');
+        if (admin) admin.classList.remove('hidden');
     }
 
-    public async updateDB() {
+    async updateDB() {
         const status = document.getElementById('admin-status');
         if (status) status.innerText = 'Запуск кластеризации и парсинга...';
-        const response = await fetch('/api/admin/update-db', { method: 'POST' });
-        const data = await response.json();
-        if (status) status.innerText = data.status;
+        try {
+            const response = await fetch('/api/admin/update-db', { method: 'POST' });
+            const data = await response.json();
+            if (status) status.innerText = data.status || 'Готово';
+        } catch (e) {
+            console.error(e);
+            if (status) status.innerText = 'Ошибка при обновлении матрицы';
+        }
     }
 }
 
 // Global exposure for HTML onclicks
-(window as any).app = new FitApp();
-(window as any).showInput = () => (window as any).app.showInput();
-(window as any).showAdmin = () => (window as any).app.showAdmin();
-(window as any).updateDB = () => (window as any).app.updateDB();
+window.app = new FitApp();
+window.showInput = () => window.app.showInput();
+window.showAdmin = () => window.app.showAdmin();
+window.updateDB = () => window.app.updateDB();

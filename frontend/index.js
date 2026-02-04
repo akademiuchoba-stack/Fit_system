@@ -28,11 +28,13 @@ class FitApp {
         // Преобразование типов
         this.currentUser = {};
         for (let k in data) {
-            if (k !== 'name' && k !== 'gender') {
-                this.currentUser[k] = parseFloat(data[k]);
-            } else {
+            if (k === "name" || k === "gender") {
                 this.currentUser[k] = data[k];
+            } else {
+                const num = Number(data[k]);
+                this.currentUser[k] = isNaN(num) ? null : num;
             }
+
         }
 
         try {

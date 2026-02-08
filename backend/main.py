@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect
 
-from . import models, database, logic, parser, calibration
+from . import models, database, parser, calibration
+from . import fit_engine
 
 # -----------------------------
 # ЛОГИРОВАНИЕ
@@ -251,7 +252,8 @@ def calculate_for_profile(
                 "metrics": m_norm,
             }
 
-            fit_res = logic.compute_fit_score(user_data, garment_payload, size_label=str(size_label))
+            # ВАЖНО: алгоритм вызываем только через fit_engine (изоляция)
+            fit_res = fit_engine.calculate_fit(user_data, garment_payload, size_label=str(size_label))
             if fit_res.score > best_score:
                 best_score = fit_res.score
                 best = {
@@ -640,5 +642,6 @@ def serve_admin_js_head():
 # -----------------------------
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 

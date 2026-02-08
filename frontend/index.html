@@ -1,224 +1,209 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Fit | Инструмент проверки алгоритма</title>
-
-  <!-- Tailwind CDN (быстро для прототипа/инструмента) -->
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Fit</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
-
-  <style>
-    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-    input:focus, select:focus, button:focus { outline: none; }
-    /* чтобы страница ощущалась “приложением” */
-    .bg-soft {
-      background-color: #f8fafc;
-      background-image:
-        radial-gradient(at 0% 0%, rgba(99,102,241,.06) 0, transparent 55%),
-        radial-gradient(at 70% 0%, rgba(16,185,129,.05) 0, transparent 55%);
-    }
-  </style>
 </head>
+<body class="bg-gray-50 text-gray-900">
+  <!-- Top bar -->
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-2xl bg-gray-900 text-white flex items-center justify-center font-black text-base shadow">Fit</div>
 
-<body class="bg-soft min-h-screen text-gray-900 overflow-x-hidden">
-
-  <!-- Header -->
-  <header class="bg-white/90 backdrop-blur border-b border-gray-100 sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-10 h-10 rounded-2xl bg-gray-900 text-white flex items-center justify-center font-black text-lg shadow">Fit</div>
-        <div class="min-w-0">
-          <div class="text-[11px] uppercase tracking-widest font-extrabold text-gray-400">Активный профиль</div>
-          <div class="flex items-center gap-2 min-w-0">
-            <span id="active-dot" class="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
-            <span id="active-profile" class="font-black text-lg truncate">—</span>
-          </div>
-        </div>
+      <div class="min-w-0 flex-1">
+        <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Активный профиль</div>
+        <div id="active-profile" class="truncate font-black text-base leading-tight">—</div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button id="btn-refresh" class="px-4 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-sm uppercase tracking-widest hover:bg-indigo-600 transition">Обновить</button>
-        <button id="btn-cabinet" class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-sm uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">Кабинет</button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="btn-refresh" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">
+          Обновить
+        </button>
+        <button id="btn-cabinet" class="px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">
+          Кабинет
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main content -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-24 md:pb-8">
+  <!-- Main: cards only -->
+  <main class="max-w-6xl mx-auto px-4 py-5 pb-10">
+    <div id="toast" class="hidden mb-4 p-3 rounded-2xl bg-gray-900 text-white text-sm"></div>
 
-    <!-- Results grid (главная страница) -->
-    <section id="results-section" class="space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <div class="text-xs font-mono text-gray-500" id="calc-meta">—</div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button id="btn-admin" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">Админ</button>
-        </div>
+    <section id="main-view">
+      <div id="cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+      <div id="empty-state" class="hidden mt-10 text-center">
+        <div class="text-sm text-gray-600">Нет активного профиля или товаров.</div>
+        <button id="btn-open-cabinet" class="mt-4 px-4 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest">
+          Открыть кабинет
+        </button>
       </div>
-
-      <div id="results-empty" class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
-        <div class="flex items-start gap-4">
-          <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-black">i</div>
-          <div>
-            <div class="font-black text-lg">Выбери профиль в “Кабинет”</div>
-            <div class="text-gray-500 mt-1 text-sm">Здесь появятся 20 карточек подходящей одежды из базы магазина.</div>
-          </div>
-        </div>
-      </div>
-
-      <div id="results-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"></div>
     </section>
 
-    <!-- Cabinet (профили) -->
-    <section id="cabinet-section" class="hidden space-y-6">
-      <div class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div class="text-2xl font-black">Кабинет</div>
-            <div class="text-gray-500 text-sm mt-1">Профили людей (сохранение, выбор активного, редактирование, удаление).</div>
-          </div>
-          <div class="flex gap-2">
-            <button id="btn-run-parser" class="px-4 py-2 rounded-xl bg-emerald-600 text-white font-extrabold text-sm uppercase tracking-widest hover:bg-emerald-700 transition">Обновить базу</button>
-            <button id="btn-back" class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-sm uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">Назад</button>
-          </div>
+    <!-- Cabinet -->
+    <section id="cabinet-view" class="hidden">
+      <div class="flex items-center justify-between gap-3 mt-1">
+        <h1 class="text-lg font-black">Кабинет</h1>
+        <div class="flex items-center gap-2">
+          <button id="btn-admin" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">
+            Админ
+          </button>
+          <button id="btn-back" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
+            Назад
+          </button>
         </div>
-        <div id="cabinet-status" class="mt-3 text-xs font-mono text-indigo-500"></div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <!-- Profiles list -->
-        <div class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
+        <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
           <div class="flex items-center justify-between gap-3">
-            <div class="font-black text-lg">Профили</div>
-            <button id="btn-new-profile" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">Добавить</button>
+            <div class="font-black">Профили</div>
+            <button id="btn-run-parser" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
+              Обновить базу
+            </button>
           </div>
-          <div id="profiles-list" class="mt-4 space-y-2"></div>
+          <div id="profiles" class="mt-3 space-y-3"></div>
+          <div id="profiles-empty" class="hidden mt-3 text-sm text-gray-500">Профилей пока нет. Добавь новый справа.</div>
         </div>
 
-        <!-- Editor -->
-        <div class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
-          <div class="font-black text-lg">Профиль тела</div>
-          <form id="profile-form" class="mt-4 space-y-5">
-            <input type="hidden" name="id" />
+        <!-- Profile form -->
+        <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
+          <div class="flex items-center justify-between gap-3">
+            <div id="form-title" class="font-black">Новый профиль</div>
+            <button id="btn-clear-form" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">
+              Очистить
+            </button>
+          </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Уникальное имя</label>
-                <input name="name" required class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" placeholder="Например: Иван_Клиент_1" />
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Пол</label>
-                <select name="gender" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold appearance-none">
-                  <option value="male">Мужской</option>
-                  <option value="female">Женский</option>
+          <form id="profile-form" class="mt-4 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Имя (уникальное)</div>
+                <input name="name" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Например: Иван"/>
+              </label>
+
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Пол</div>
+                <select name="gender" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                  <option value="male">male</option>
+                  <option value="female">female</option>
                 </select>
-              </div>
+              </label>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Рост</label>
-                <input type="number" inputmode="numeric" min="0" name="height" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Грудь</label>
-                <input type="number" inputmode="numeric" min="0" name="chest" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Плечи</label>
-                <input type="number" inputmode="numeric" min="0" name="shoulders" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Талия</label>
-                <input type="number" inputmode="numeric" min="0" name="waist" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Рост</div>
+                <input type="number" inputmode="numeric" min="0" name="height" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="175"/>
+              </label>
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Грудь</div>
+                <input type="number" inputmode="numeric" min="0" name="chest" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="100"/>
+              </label>
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Плечи</div>
+                <input type="number" inputmode="numeric" min="0" name="shoulders" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="46"/>
+              </label>
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Талия</div>
+                <input type="number" inputmode="numeric" min="0" name="waist" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="85"/>
+              </label>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Длина руки</label>
-                <input type="number" inputmode="numeric" min="0" name="arm_length" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Бедра</label>
-                <input type="number" inputmode="numeric" min="0" name="hips" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Длина ноги</label>
-                <input type="number" inputmode="numeric" min="0" name="leg_length" class="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" />
-              </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Бёдра</div>
+                <input type="number" inputmode="numeric" min="0" name="hips" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="98"/>
+              </label>
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Рука</div>
+                <input type="number" inputmode="numeric" min="0" name="arm_length" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="62"/>
+              </label>
+              <label class="block">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Нога</div>
+                <input type="number" inputmode="numeric" min="0" name="leg_length" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="102"/>
+              </label>
             </div>
 
-            <div class="flex flex-col sm:flex-row gap-2">
-              <button type="submit" class="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-black uppercase tracking-widest hover:bg-indigo-600 transition">Сохранить</button>
-              <button type="button" id="btn-clear-form" class="px-5 py-4 rounded-2xl bg-white border border-gray-200 text-gray-700 font-black uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">Очистить</button>
+            <div class="flex items-center gap-2">
+              <button type="submit" id="btn-save-profile" class="flex-1 px-4 py-3 rounded-2xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">
+                Сохранить
+              </button>
+              <button type="button" id="btn-cancel-edit" class="hidden px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest">
+                Отмена
+              </button>
             </div>
+
+            <input type="hidden" name="id" />
           </form>
         </div>
       </div>
-    </section>
 
-    <!-- Admin (исследования) -->
-    <section id="admin-section" class="hidden space-y-6">
-      <div class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div class="text-2xl font-black">Админ</div>
-            <div class="text-gray-500 text-sm mt-1">Быстрый обзор базы и результатов (для инвестора/проверки).</div>
-          </div>
-          <div class="flex gap-2">
-            <button id="btn-admin-refresh" class="px-4 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-sm uppercase tracking-widest hover:bg-indigo-600 transition">Обновить</button>
-            <button id="btn-admin-back" class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-sm uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">Назад</button>
-          </div>
+      <!-- Admin panel -->
+      <div id="admin-panel" class="hidden mt-4 bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="font-black">Admin</div>
+          <button id="btn-admin-close" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">Скрыть</button>
         </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
-          <div class="font-black text-lg">Статистика</div>
-          <pre id="admin-stats" class="mt-4 text-xs bg-gray-50 border border-gray-100 rounded-2xl p-4 overflow-auto">—</pre>
-        </div>
-        <div class="bg-white border border-gray-100 rounded-3xl p-6 sm:p-8 shadow-sm">
-          <div class="font-black text-lg">Последние отзывы</div>
-          <div id="admin-feedback" class="mt-4 space-y-2">—</div>
-        </div>
+        <div id="admin-stats" class="mt-3 text-sm text-gray-700"></div>
       </div>
     </section>
-
   </main>
 
-  <!-- Card modal -->
+  <!-- Modal -->
   <div id="modal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 hidden">
     <div class="w-full h-full md:flex md:items-center md:justify-center p-0 md:p-4">
-      <div class="bg-white w-full h-full md:h-auto md:max-w-4xl md:rounded-[2.5rem] overflow-hidden md:max-h-[95vh] overflow-y-auto shadow-2xl">
+      <div class="bg-white w-full h-full md:h-auto md:max-w-4xl md:rounded-[2rem] overflow-hidden md:max-h-[95vh] overflow-y-auto shadow-2xl">
         <div class="p-5 sm:p-7 md:p-10">
-          <div class="flex items-center justify-between gap-3">
-            <div class="font-black text-lg" id="modal-title">Детали</div>
-            <button id="modal-close" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest">Закрыть</button>
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div id="modal-title" class="font-black text-lg truncate">—</div>
+              <div id="modal-subtitle" class="text-sm text-gray-500 mt-1">—</div>
+            </div>
+            <button id="btn-close-modal" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">Закрыть</button>
           </div>
-          <div id="modal-content" class="mt-6"></div>
+
+          <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="rounded-3xl border border-gray-100 overflow-hidden bg-gray-50">
+              <img id="modal-image" alt="" class="w-full h-full object-cover min-h-[260px]" />
+            </div>
+            <div class="space-y-3">
+              <div class="p-4 rounded-3xl border border-gray-100 bg-white">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Оценка</div>
+                <div id="modal-score" class="mt-1 text-2xl font-black">—</div>
+                <div id="modal-explain" class="mt-2 text-sm text-gray-700">—</div>
+              </div>
+
+              <div class="p-4 rounded-3xl border border-gray-100 bg-white">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Замеры из базы</div>
+                <div id="modal-metrics" class="mt-2 text-sm text-gray-800"></div>
+              </div>
+
+              <div class="p-4 rounded-3xl border border-gray-100 bg-white">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Реальные замеры (магазин)</div>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                  <input id="real-chest" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Грудь"/>
+                  <input id="real-shoulders" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Плечи"/>
+                  <input id="real-sleeve" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Рукав"/>
+                  <input id="real-length" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Длина"/>
+                </div>
+                <button id="btn-save-real" class="mt-3 w-full px-4 py-3 rounded-2xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">
+                  Сохранить замеры / feedback
+                </button>
+                <div id="real-save-note" class="mt-2 text-xs text-gray-500"></div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Mobile bottom nav -->
-  <div class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/90 backdrop-blur border-t border-gray-100">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
-      <button id="m-refresh" class="flex-1 py-3 rounded-xl bg-gray-900 text-white font-extrabold text-sm uppercase tracking-widest">Обновить</button>
-      <button id="m-cabinet" class="px-5 py-3 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-sm uppercase tracking-widest">Кабинет</button>
-    </div>
-  </div>
-
-  <!--
-    NOTE:
-    We intentionally load JS as a classic script (not ES module) and from /index.js.
-    This makes the UI work even when the project is served behind various nginx setups
-    where /static may not be routed correctly.
-  -->
-  <script src="/index.js" defer></script>
+  <script src="/index.js"></script>
 </body>
 </html>

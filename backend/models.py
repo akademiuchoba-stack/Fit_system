@@ -1,5 +1,6 @@
 
-from sqlalchemy import Column, Integer, String, Float, JSON, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, JSON, Boolean, ForeignKey, DateTime
+from datetime import datetime
 from .database import Base
 from pydantic import BaseModel
 from typing import Dict, Optional
@@ -58,6 +59,26 @@ class Feedback(Base):
     real_measurements = Column(JSON)
 
 
+class BodyProfile(Base):
+    """Профиль тела (сохраняется по уникальному имени)."""
+    __tablename__ = "body_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    gender = Column(String, default="male")
+
+    height = Column(Float)
+    chest = Column(Float)
+    shoulders = Column(Float)
+    waist = Column(Float)
+    hips = Column(Float)
+    arm_length = Column(Float)
+    leg_length = Column(Float)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ============================
 #   Pydantic SCHEMAS
 # ============================
@@ -78,6 +99,36 @@ class UserMetrics(BaseModel):
 class FitRequest(BaseModel):
     user: UserMetrics
     sku: Optional[str] = None
+
+
+class CalculateRequest(BaseModel):
+    """Запрос на рекомендации по активному профилю из 'Кабинета'."""
+    profile_id: int
+
+
+
+class BodyProfileCreate(BaseModel):
+    name: str
+    gender: str = "male"
+    height: float
+    chest: float
+    shoulders: float
+    waist: float
+    hips: float
+    arm_length: float
+    leg_length: float
+
+
+class BodyProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    height: Optional[float] = None
+    chest: Optional[float] = None
+    shoulders: Optional[float] = None
+    waist: Optional[float] = None
+    hips: Optional[float] = None
+    arm_length: Optional[float] = None
+    leg_length: Optional[float] = None
 
 
 class FeedbackSubmit(BaseModel):

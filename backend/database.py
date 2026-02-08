@@ -34,6 +34,15 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    # cache_size отрицательное = килобайты; ~20MB
+    cursor.execute("PRAGMA cache_size=-20000")
+    # mmap ускоряет чтение, если ОС позволяет
+    try:
+        cursor.execute("PRAGMA mmap_size=268435456")  # 256MB
+    except Exception:
+        pass
     cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

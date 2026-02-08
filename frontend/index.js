@@ -1,279 +1,680 @@
-/**
- * Fit_system Frontend Logic
- * Handling UI state, API calls, and reactive rendering.
- */
+/*
+  Fit — lightweight internal tool UI
+  - Profiles stored on server (SQLite)
+  - Main page shows 20 best matching items for active profile
+  - Cabinet: CRUD profiles, set active, run DB update/parser
+  - Admin: quick stats + recent feedback (for research)
+*/
 
-class FitApp {
-    constructor() {
-        this.currentUser = null;
-        this.results = [];
-        this.initEventListeners();
-    }
+const API = {
+  profiles: '/api/profiles',
+  profileById: (id) => `/api/profiles/${id}`,
+  calculate: '/api/calculate?limit=20',
+  feedback: '/api/feedback',
+  updateDb: '/api/admin/update-db',
+  adminStats: '/api/admin/stats',
+};
 
-    initEventListeners() {
-        const form = document.getElementById('metrics-form');
-        if (form) {
-            form.onsubmit = async (e) => {
-                e.preventDefault();
-                await this.handleFormSubmit(form);
-            };
-        }
-    }
+function qs(sel) { return document.querySelector(sel); }
+function qsa(sel) { return Array.from(document.querySelectorAll(sel)); }
 
-    async handleFormSubmit(form) {
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData.entries());
-
-        // Преобразование типов
-        this.currentUser = {};
-        for (let k in data) {
-            if (k === "name" || k === "gender") {
-                this.currentUser[k] = data[k];
-            } else {
-                const num = Number(data[k]);
-                this.currentUser[k] = isNaN(num) ? null : num;
-            }
-        }
-
-        try {
-            const response = await fetch('/api/calculate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user: this.currentUser })
-            });
-
-            if (!response.ok) throw new Error('Ошибка расчета');
-
-            this.results = await response.json();
-            this.renderResults();
-        } catch (error) {
-            alert('Не удалось связаться с сервером. Убедитесь, что Backend запущен.');
-            console.error(error);
-        }
-    }
-
-    renderResults() {
-        const grid = document.getElementById('results-grid');
-        const inputSec = document.getElementById('input-section');
-        const resultSec = document.getElementById('results-section');
-
-        if (!grid || !inputSec || !resultSec) return;
-
-        grid.innerHTML = '';
-        this.results.forEach((res) => {
-            const card = document.createElement('div');
-            card.className = 'bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-gray-100';
-            card.onclick = () => this.openDetail(res);
-
-            const scoreColor =
-                res.fit.score > 85 ? 'bg-emerald-500' :
-                res.fit.score > 70 ? 'bg-amber-500' :
-                'bg-rose-500';
-
-            card.innerHTML = `
-                <div class="relative aspect-[3/4] overflow-hidden">
-                    <img src="${res.image}" class="w-full h-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy">
-                    <div class="absolute top-4 right-4 ${scoreColor} text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg">
-                        ${res.fit.verdict}
-                    </div>
-                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-6 text-white">
-                        <div class="text-[10px] opacity-80 font-bold uppercase">${res.platform}</div>
-                        <div class="font-bold text-lg leading-tight truncate">${res.name}</div>
-                    </div>
-                </div>
-                <div class="p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <span class="text-indigo-600 font-black text-xl">Размер ${res.size}</span>
-                        <div class="flex flex-col items-end">
-                            <span class="text-[10px] text-gray-400 font-bold uppercase">Fit Score</span>
-                            <span class="text-lg font-mono font-bold ${res.fit.score > 70 ? 'text-gray-800' : 'text-rose-600'}">${res.fit.score}%</span>
-                        </div>
-                    </div>
-                    <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                        <div class="${scoreColor} h-full transition-all duration-1000" style="width: ${res.fit.score}%"></div>
-                    </div>
-                </div>
-            `;
-            grid.appendChild(card);
-        });
-
-        inputSec.classList.add('hidden');
-        resultSec.classList.remove('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-
-    openDetail(res) {
-        const modal = document.getElementById('modal');
-        const content = document.getElementById('modal-content');
-        if (!modal || !content) return;
-
-        const mc = res.fit.metrics_comparison || {};
-
-        content.innerHTML = `
-            <div class="flex justify-between items-start mb-8">
-                <div>
-                    <h2 class="text-3xl font-black text-gray-900">${res.name}</h2>
-                    <p class="text-gray-400 font-mono text-sm tracking-tighter uppercase mt-1">
-                        SKU: ${res.sku} | Location: Angarsk, Festival
-                    </p>
-                </div>
-                <button onclick="window.app.closeModal()" class="p-3 bg-gray-50 hover:bg-gray-100 rounded-full transition-colors">
-                    <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <div class="space-y-4">
-                    <img src="${res.image}" class="w-full rounded-3xl shadow-2xl border border-gray-100">
-                    <div class="p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
-                        <h4 class="text-indigo-900 font-bold text-sm uppercase mb-2">Технический Вердикт</h4>
-                        <p class="text-indigo-700 leading-relaxed">${res.fit.details}</p>
-                    </div>
-                </div>
-                
-                <div class="flex flex-col h-full">
-                    <h3 class="font-black text-gray-400 uppercase text-[11px] tracking-widest mb-6">
-                        Computational Geometry Analysis
-                    </h3>
-                    <div class="space-y-6 flex-grow">
-                        ${this.renderMetricRow('Полуобхват груди (Вещь)', mc.garment_chest, 'см')}
-                        ${this.renderMetricRow('Ваш полуобхват (Тело)', mc.user_chest_half, 'см', true)}
-                        ${this.renderMetricRow('Рукав (Dropped Shoulder Corr.)', mc.effective_sleeve, 'см')}
-                        ${this.renderMetricRow('Ваша длина руки', mc.user_arm, 'см', true)}
-                    </div>
-
-                    <div class="mt-10 pt-8 border-t border-gray-100">
-                        <h3 class="font-bold text-gray-900 mb-4">Байесовская калибровка</h3>
-                        <p class="text-xs text-gray-500 mb-6 leading-relaxed">
-                            Ваш отзыв поможет алгоритму точнее рассчитывать посадку для жителей Ангарска.
-                        </p>
-
-                        <div class="grid grid-cols-3 gap-3">
-                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', 0)"
-                                class="flex flex-col items-center py-4 bg-emerald-50 text-emerald-700 rounded-2xl border-2 border-transparent hover:border-emerald-500 transition-all group">
-                                <span class="text-2xl mb-1 group-hover:scale-125 transition-transform">🎯</span>
-                                <span class="text-[10px] font-bold uppercase">В точку</span>
-                            </button>
-
-                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', 1)"
-                                class="flex flex-col items-center py-4 bg-amber-50 text-amber-700 rounded-2xl border-2 border-transparent hover:border-amber-500 transition-all group">
-                                <span class="text-2xl mb-1 group-hover:scale-125 transition-transform">🤏</span>
-                                <span class="text-[10px] font-bold uppercase">Маловато</span>
-                            </button>
-
-                            <button onclick="window.app.submitFeedback(${res.item_id}, '${res.size}', -1)"
-                                class="flex flex-col items-center py-4 bg-rose-50 text-rose-700 rounded-2xl border-2 border-transparent hover:border-rose-500 transition-all group">
-                                <span class="text-2xl mb-1 group-hover:scale-125 transition-transform">🧥</span>
-                                <span class="text-[10px] font-bold uppercase">Велико</span>
-                            </button>
-                        </div>
-
-                        <div class="mt-6">
-                            <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">
-                                Уточнить замер (опционально)
-                            </label>
-                            <input id="real-chest" type="number" step="0.5"
-                                class="w-full p-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-indigo-500"
-                                placeholder="Введите реальную ширину в см...">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-    }
-
-    renderMetricRow(label, value, unit, isUser) {
-        if (value === undefined || value === null || isNaN(value)) {
-            return `
-                <div class="flex items-end justify-between border-b border-gray-50 pb-3 opacity-50">
-                    <span class="text-sm ${isUser ? 'text-gray-400' : 'text-gray-600 font-medium'}">${label}</span>
-                    <span class="font-mono text-lg font-bold ${isUser ? 'text-gray-400' : 'text-indigo-600'}">—</span>
-                </div>
-            `;
-        }
-
-        return `
-            <div class="flex items-end justify-between border-b border-gray-50 pb-3">
-                <span class="text-sm ${isUser ? 'text-gray-400' : 'text-gray-600 font-medium'}">${label}</span>
-                <span class="font-mono text-lg font-bold ${isUser ? 'text-gray-400' : 'text-indigo-600'}">${value}${unit}</span>
-            </div>
-        `;
-    }
-
-    closeModal() {
-        const modal = document.getElementById('modal');
-        if (modal) modal.classList.add('hidden');
-        document.body.style.overflow = 'auto';
-    }
-
-    async submitFeedback(itemId, size, judgment) {
-        const realChestInput = document.getElementById('real-chest');
-        const realChest = realChestInput ? realChestInput.value : null;
-
-        const payload = {
-            garment_id: itemId,
-            user_id: (this.currentUser && this.currentUser.name) || 'anonymous',
-            size_selected: size,
-            judgment: judgment,
-            real_measurements: realChest ? { chest: parseFloat(realChest) } : null
-        };
-
-        try {
-            await fetch('/api/feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            alert('Данные приняты. Алгоритм откалиброван!');
-            this.closeModal();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    showInput() {
-        const input = document.getElementById('input-section');
-        const results = document.getElementById('results-section');
-        const admin = document.getElementById('admin-section');
-
-        if (input) input.classList.remove('hidden');
-        if (results) results.classList.add('hidden');
-        if (admin) admin.classList.add('hidden');
-    }
-
-    showAdmin() {
-        const input = document.getElementById('input-section');
-        const results = document.getElementById('results-section');
-        const admin = document.getElementById('admin-section');
-
-        if (input) input.classList.add('hidden');
-        if (results) results.classList.add('hidden');
-        if (admin) admin.classList.remove('hidden');
-    }
-
-    async updateDB() {
-        const status = document.getElementById('admin-status');
-        if (status) status.innerText = 'Запуск кластеризации и парсинга...';
-
-        try {
-            const response = await fetch('/api/admin/update-db', { method: 'POST' });
-            const data = await response.json();
-            if (status) status.innerText = data.status || 'Готово';
-        } catch (e) {
-            console.error(e);
-            if (status) status.innerText = 'Ошибка при обновлении матрицы';
-        }
-    }
+function formField(form, name) {
+  if (!form) return null;
+  return form.querySelector(`[name="${name}"]`);
 }
 
-// Global exposure for HTML onclicks
+function fmtPct(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+  const v = Math.max(0, Math.min(100, Math.round(Number(n))));
+  return `${v}%`;
+}
+
+function safeNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function debounce(fn, ms = 250) {
+  let t = null;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+class FitApp {
+  constructor() {
+    this.activeProfileId = null;
+    this.activeProfile = null;
+    this.results = [];
+    this.adminLast = null;
+
+    this.bindUI();
+    this.bootstrap();
+  }
+
+  bindUI() {
+    // header
+    const hRefresh = qs('#btn-refresh');
+    if (hRefresh) hRefresh.addEventListener('click', () => this.refreshResults());
+    const hCabinet = qs('#btn-cabinet');
+    if (hCabinet) hCabinet.addEventListener('click', () => this.showCabinet());
+    const hAdmin = qs('#btn-admin');
+    if (hAdmin) hAdmin.addEventListener('click', () => this.showAdmin());
+
+    // mobile bottom nav (если есть)
+    const mRefresh = qs('#m-refresh');
+    const mCabinet = qs('#m-cabinet');
+    if (mRefresh) mRefresh.addEventListener('click', () => this.refreshResults());
+    if (mCabinet) mCabinet.addEventListener('click', () => this.showCabinet());
+
+    // cabinet
+    const cabBack = qs('#btn-back');
+    if (cabBack) cabBack.addEventListener('click', () => this.showMain());
+    const cabUpdate = qs('#btn-run-parser');
+    if (cabUpdate) cabUpdate.addEventListener('click', () => this.updateDB());
+
+    // profile form
+    const pForm = qs('#profile-form');
+    if (pForm) pForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.saveProfileFromForm();
+    });
+    const pCancel = qs('#btn-clear-form');
+    if (pCancel) pCancel.addEventListener('click', () => this.resetProfileForm());
+
+    // admin
+    const aBack = qs('#btn-admin-back');
+    if (aBack) aBack.addEventListener('click', () => this.showMain());
+    const aRefresh = qs('#btn-admin-refresh');
+    if (aRefresh) aRefresh.addEventListener('click', () => this.refreshAdmin());
+    const dl = qs('#btn-admin-download');
+    if (dl) dl.addEventListener('click', () => this.downloadAdminJSON());
+
+    // modal close on backdrop click
+    const modal = qs('#modal');
+    if (modal) modal.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'modal') this.closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.closeModal();
+    });
+
+    // auto refresh results when measurement form changes (only for edit mode)
+    const auto = debounce(() => {
+      // do nothing if no active profile
+      if (!this.activeProfileId) return;
+      // only when on main
+      if (qs('#cabinet-section').classList.contains('hidden') === false) return;
+      if (qs('#admin-section').classList.contains('hidden') === false) return;
+    }, 400);
+    qsa('input,select').forEach((el) => el.addEventListener('change', auto));
+  }
+
+  async bootstrap() {
+    // restore active profile id from localStorage
+    const savedId = localStorage.getItem('fit_active_profile_id');
+    if (savedId) this.activeProfileId = Number(savedId);
+
+    await this.loadProfilesAndRender();
+
+    if (this.activeProfileId) {
+      await this.loadActiveProfile();
+      await this.refreshResults();
+      this.showMain();
+    } else {
+      // first time: go to cabinet
+      this.showCabinet();
+    }
+  }
+
+  // --------------------
+  // UI navigation
+  // --------------------
+  showMain() {
+    qs('#cabinet-section').classList.add('hidden');
+    qs('#admin-section').classList.add('hidden');
+    qs('#results-section').classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  showCabinet() {
+    qs('#admin-section').classList.add('hidden');
+    qs('#results-section').classList.add('hidden');
+    qs('#cabinet-section').classList.remove('hidden');
+    this.loadProfilesAndRender();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  showAdmin() {
+    qs('#cabinet-section').classList.add('hidden');
+    qs('#results-section').classList.add('hidden');
+    qs('#admin-section').classList.remove('hidden');
+    this.refreshAdmin();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // --------------------
+  // Profiles
+  // --------------------
+  async loadProfilesAndRender() {
+    const listEl = qs('#profiles-list');
+    const statusEl = qs('#cabinet-status');
+    listEl.innerHTML = '';
+
+    let profiles = [];
+    try {
+      const r = await fetch(API.profiles);
+      if (!r.ok) throw new Error('profiles fetch failed');
+      profiles = await r.json();
+    } catch (e) {
+      if (statusEl) statusEl.classList.remove('hidden');
+      if (statusEl) statusEl.innerText = 'Не удалось загрузить профили (проверь, запущен ли backend).';
+      return;
+    }
+
+    if (!profiles.length) {
+      if (statusEl) statusEl.classList.remove('hidden');
+      if (statusEl) statusEl.innerText = 'Профилей пока нет — добавь новый ниже.';
+      return;
+    }
+
+    if (statusEl) statusEl.classList.add('hidden');
+
+    profiles.forEach((p) => {
+      const isActive = this.activeProfileId === p.id;
+      const row = document.createElement('div');
+      row.className = `flex items-center justify-between gap-3 p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition`;
+
+      row.innerHTML = `
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-2.5 h-2.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-gray-300'}"></span>
+            <div class="font-black text-base truncate">${this.escape(p.name)}</div>
+            <div class="text-[10px] uppercase tracking-widest font-extrabold text-gray-400">${this.escape(p.gender || '—')}</div>
+          </div>
+          <div class="text-xs text-gray-500 mt-1 font-mono">Рост ${p.height ?? '—'} • Грудь ${p.chest ?? '—'} • Плечи ${p.shoulders ?? '—'} • Талия ${p.waist ?? '—'}</div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button data-act="use" data-id="${p.id}" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">Активировать</button>
+          <button data-act="edit" data-id="${p.id}" class="px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">Редакт</button>
+          <button data-act="del" data-id="${p.id}" class="px-3 py-2 rounded-xl bg-white border border-gray-200 text-rose-600 font-extrabold text-xs uppercase tracking-widest hover:border-rose-300 transition">Удалить</button>
+        </div>
+      `;
+
+      listEl.appendChild(row);
+    });
+
+    // bind actions
+    qsa('[data-act]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const act = btn.getAttribute('data-act');
+        const id = Number(btn.getAttribute('data-id'));
+        if (act === 'use') return this.setActiveProfile(id);
+        if (act === 'edit') return this.loadProfileIntoForm(id);
+        if (act === 'del') return this.deleteProfile(id);
+      });
+    });
+  }
+
+  async setActiveProfile(id) {
+    this.activeProfileId = id;
+    localStorage.setItem('fit_active_profile_id', String(id));
+    await this.loadActiveProfile();
+    await this.refreshResults();
+    await this.loadProfilesAndRender();
+    this.showMain();
+  }
+
+  async loadActiveProfile() {
+    if (!this.activeProfileId) {
+      this.activeProfile = null;
+      this.renderActiveHeader();
+      return;
+    }
+    try {
+      const r = await fetch(API.profileById(this.activeProfileId));
+      if (!r.ok) throw new Error('profile fetch failed');
+      this.activeProfile = await r.json();
+    } catch (e) {
+      // if profile deleted on server
+      this.activeProfileId = null;
+      this.activeProfile = null;
+      localStorage.removeItem('fit_active_profile_id');
+    }
+    this.renderActiveHeader();
+  }
+
+  renderActiveHeader() {
+    const nameEl = qs('#active-profile');
+    const dotEl = qs('#active-dot');
+
+    if (!this.activeProfile) {
+      nameEl.textContent = '—';
+      dotEl.className = 'w-2.5 h-2.5 rounded-full bg-gray-300';
+      return;
+    }
+    nameEl.textContent = this.activeProfile.name;
+    dotEl.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+  }
+
+  resetProfileForm() {
+    const form = qs('#profile-form');
+    const titleEl = qs('#profile-form-title');
+    if (titleEl) titleEl.textContent = 'Новый профиль';
+
+    const idEl = formField(form, 'id');
+    const nameEl = formField(form, 'name');
+    const genderEl = formField(form, 'gender');
+    if (idEl) idEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (genderEl) genderEl.value = 'male';
+
+    ['height','chest','shoulders','waist','hips','arm_length','leg_length'].forEach((k) => {
+      const el = formField(form, k);
+      if (el) el.value = '';
+    });
+  }
+
+  async loadProfileIntoForm(id) {
+    let p;
+    try {
+      const r = await fetch(API.profileById(id));
+      if (!r.ok) throw new Error('profile fetch failed');
+      p = await r.json();
+    } catch (e) {
+      alert('Не удалось загрузить профиль.');
+      return;
+    }
+
+    const form = qs('#profile-form');
+    const titleEl = qs('#profile-form-title');
+    if (titleEl) titleEl.textContent = 'Редактирование профиля';
+
+    const idEl = formField(form, 'id');
+    const nameEl = formField(form, 'name');
+    const genderEl = formField(form, 'gender');
+    if (idEl) idEl.value = String(p.id);
+    if (nameEl) nameEl.value = p.name ?? '';
+    if (genderEl) genderEl.value = p.gender ?? 'male';
+
+    ['height','chest','shoulders','waist','hips','arm_length','leg_length'].forEach((k) => {
+      const el = formField(form, k);
+      if (el) el.value = p[k] ?? '';
+    });
+
+    // scroll to form
+    const pf = qs('#profile-form');
+    if (pf) pf.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async saveProfileFromForm() {
+    const form = qs('#profile-form');
+    const id = (formField(form, 'id')?.value ?? '').trim();
+    const payload = {
+      name: (formField(form, 'name')?.value ?? '').trim(),
+      gender: formField(form, 'gender')?.value ?? 'male',
+      height: safeNum(formField(form, 'height')?.value),
+      chest: safeNum(formField(form, 'chest')?.value),
+      shoulders: safeNum(formField(form, 'shoulders')?.value),
+      waist: safeNum(formField(form, 'waist')?.value),
+      hips: safeNum(formField(form, 'hips')?.value),
+      arm_length: safeNum(formField(form, 'arm_length')?.value),
+      leg_length: safeNum(formField(form, 'leg_length')?.value),
+    };
+
+    if (!payload.name) {
+      alert('Укажи имя профиля (уникальное).');
+      return;
+    }
+
+    const isUpdate = Boolean(id);
+    const url = isUpdate ? API.profileById(Number(id)) : API.profiles;
+    const method = isUpdate ? 'PUT' : 'POST';
+
+    try {
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert(data?.detail || 'Не удалось сохранить профиль.');
+        return;
+      }
+
+      this.resetProfileForm();
+      await this.loadProfilesAndRender();
+      // если активный профиль редактировали — перезагрузить
+      if (this.activeProfileId && Number(id) === this.activeProfileId) {
+        await this.loadActiveProfile();
+        await this.refreshResults();
+      }
+    } catch (e) {
+      alert('Сервер недоступен (backend).');
+    }
+  }
+
+  async deleteProfile(id) {
+    if (!confirm('Удалить профиль?')) return;
+    try {
+      const r = await fetch(API.profileById(id), { method: 'DELETE' });
+      if (!r.ok) throw new Error('delete failed');
+    } catch (e) {
+      alert('Не удалось удалить профиль.');
+      return;
+    }
+
+    if (this.activeProfileId === id) {
+      this.activeProfileId = null;
+      this.activeProfile = null;
+      localStorage.removeItem('fit_active_profile_id');
+      this.renderActiveHeader();
+      this.results = [];
+      this.renderResults();
+    }
+
+    await this.loadProfilesAndRender();
+  }
+
+  // --------------------
+  // Results
+  // --------------------
+  async refreshResults() {
+    if (!this.activeProfileId) {
+      this.renderResults();
+      return;
+    }
+
+    await this.loadActiveProfile();
+    if (!this.activeProfile) {
+      this.renderResults();
+      return;
+    }
+
+    const t0 = performance.now();
+    qs('#calc-meta').textContent = 'Расчёт…';
+
+    try {
+      const r = await fetch(API.calculate, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile_id: this.activeProfileId }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d?.detail || 'calculate failed');
+      }
+      this.results = await r.json();
+    } catch (e) {
+      qs('#calc-meta').textContent = 'Ошибка расчёта. Проверь backend/https.';
+      this.results = [];
+      this.renderResults();
+      return;
+    }
+
+    const t1 = performance.now();
+    qs('#calc-meta').textContent = `calc ${(t1 - t0).toFixed(0)}ms • cards ${this.results.length}`;
+    this.renderResults();
+  }
+
+  renderResults() {
+    const empty = qs('#results-empty');
+    const grid = qs('#results-grid');
+    grid.innerHTML = '';
+
+    if (!this.activeProfileId) {
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    if (!this.results || !this.results.length) {
+      empty.classList.remove('hidden');
+      empty.querySelector('.font-black').textContent = 'Нет результатов';
+      empty.querySelector('.text-gray-500').textContent = 'Проверь базу магазина или обнови её в “Кабинет”.';
+      return;
+    }
+
+    empty.classList.add('hidden');
+
+    this.results.forEach((res) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'text-left bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition focus:ring-2 focus:ring-indigo-400';
+      card.addEventListener('click', () => this.openDetail(res));
+
+      const score = safeNum(res?.fit?.score);
+      const scoreLabel = fmtPct(score);
+
+      card.innerHTML = `
+        <div class="relative aspect-[4/5] bg-gray-50">
+          <img src="${this.escape(res.image || '')}" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'" />
+          <div class="absolute top-3 right-3 bg-white/95 border border-gray-100 rounded-full px-3 py-1 text-xs font-black">${scoreLabel}</div>
+        </div>
+        <div class="p-4">
+          <div class="font-black leading-tight line-clamp-2">${this.escape(res.name || '—')}</div>
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-mono text-gray-500">
+            <span class="px-2 py-1 rounded-lg bg-gray-50 border border-gray-100">SKU ${this.escape(res.sku || '—')}</span>
+            <span class="px-2 py-1 rounded-lg bg-gray-50 border border-gray-100">Размер ${this.escape(res.size || '—')}</span>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  // --------------------
+  // Detail modal + feedback
+  // --------------------
+  openDetail(res) {
+    const modal = qs('#modal');
+    const content = qs('#modal-content');
+    if (!modal || !content) return;
+
+    const score = safeNum(res?.fit?.score);
+    const mc = res?.fit?.metrics_comparison || {};
+
+    const garmentMetrics = res?.fit?.garment_metrics || res?.fit?.metrics || null;
+    const garmentMetricsRows = garmentMetrics
+      ? Object.entries(garmentMetrics).map(([k, v]) => {
+          const vv = safeNum(v);
+          return `
+            <div class="flex items-end justify-between border-b border-gray-50 pb-3">
+              <span class="text-sm text-gray-600 font-medium">${this.escape(k)}</span>
+              <span class="font-mono text-lg font-bold text-indigo-700">${vv === null ? '—' : `${vv} см`}</span>
+            </div>
+          `;
+        }).join('')
+      : '<div class="text-sm text-gray-500">Нет замеров для этого размера в базе.</div>';
+
+    // real measurement inputs (for store)
+    const realFields = [
+      { key: 'sleeve', label: 'Рукав (реал, см)' },
+      { key: 'chest', label: 'Грудь (реал, см)' },
+      { key: 'shoulder', label: 'Плечи (реал, см)' },
+      { key: 'length', label: 'Длина (реал, см)' },
+    ];
+
+    const realInputs = realFields.map((f) => `
+      <div class="space-y-1">
+        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">${f.label}</label>
+        <input id="real-${f.key}" inputmode="decimal" type="number" step="0.5" class="w-full p-3 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-indigo-500 focus:bg-white transition font-bold" placeholder="—" />
+      </div>
+    `).join('');
+
+    content.innerHTML = `
+      <div class="flex items-start justify-between gap-4 mb-6">
+        <div class="min-w-0">
+          <div class="text-2xl sm:text-3xl font-black truncate">${this.escape(res.name || '—')}</div>
+          <div class="mt-1 text-xs font-mono text-gray-500">SKU ${this.escape(res.sku || '—')} • Размер ${this.escape(res.size || '—')}</div>
+        </div>
+        <button id="btn-modal-close" class="shrink-0 p-3 rounded-2xl bg-gray-50 border border-gray-100 hover:border-indigo-200 hover:text-indigo-700 transition" aria-label="Закрыть">✕</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="space-y-4">
+          <div class="aspect-[4/5] rounded-3xl overflow-hidden bg-gray-50 border border-gray-100">
+            <img src="${this.escape(res.image || '')}" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display='none'" />
+          </div>
+          <div class="p-5 rounded-3xl bg-indigo-50 border border-indigo-100">
+            <div class="text-[11px] uppercase tracking-widest font-extrabold text-indigo-700">Соответствие</div>
+            <div class="mt-2 text-4xl font-black text-indigo-900">${fmtPct(score)}</div>
+            <div class="mt-2 text-sm text-indigo-700">${this.escape(res?.fit?.verdict || '')}</div>
+            <div class="mt-3 text-xs text-indigo-600/90 leading-relaxed">${this.escape(res?.fit?.details || '')}</div>
+          </div>
+        </div>
+
+        <div class="space-y-6">
+          <div class="bg-white border border-gray-100 rounded-3xl p-5">
+            <div class="text-[11px] uppercase tracking-widest font-extrabold text-gray-400">Замеры из базы (этот размер)</div>
+            <div class="mt-4 space-y-3">${garmentMetricsRows}</div>
+          </div>
+
+          <div class="bg-white border border-gray-100 rounded-3xl p-5">
+            <div class="text-[11px] uppercase tracking-widest font-extrabold text-gray-400">Ввести реальные замеры в магазине</div>
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">${realInputs}</div>
+            <div class="mt-4 flex items-center gap-2">
+              <button id="btn-save-real" class="px-4 py-3 rounded-2xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">Сохранить в анализ</button>
+              <div id="real-status" class="text-xs font-mono text-gray-500"></div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-gray-100 rounded-3xl p-5">
+            <div class="text-[11px] uppercase tracking-widest font-extrabold text-gray-400">Быстрый вердикт (обучение)</div>
+            <div class="mt-3 grid grid-cols-3 gap-2">
+              <button data-jud="0" class="py-3 rounded-2xl bg-emerald-50 text-emerald-700 font-extrabold text-xs uppercase tracking-widest hover:ring-2 hover:ring-emerald-300 transition">В точку</button>
+              <button data-jud="1" class="py-3 rounded-2xl bg-amber-50 text-amber-700 font-extrabold text-xs uppercase tracking-widest hover:ring-2 hover:ring-amber-300 transition">Маловато</button>
+              <button data-jud="-1" class="py-3 rounded-2xl bg-rose-50 text-rose-700 font-extrabold text-xs uppercase tracking-widest hover:ring-2 hover:ring-rose-300 transition">Велико</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    qs('#btn-modal-close').addEventListener('click', () => this.closeModal());
+
+    // feedback buttons
+    qsa('[data-jud]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const j = Number(b.getAttribute('data-jud'));
+        await this.submitFeedback(res, j, null);
+      });
+    });
+
+    // save real measurements
+    qs('#btn-save-real').addEventListener('click', async () => {
+      const real = {};
+      realFields.forEach((f) => {
+        const v = safeNum(qs(`#real-${f.key}`).value);
+        if (v !== null) real[f.key] = v;
+      });
+      if (Object.keys(real).length === 0) {
+        qs('#real-status').textContent = 'Введите хотя бы 1 замер.';
+        return;
+      }
+      qs('#real-status').textContent = 'Сохраняю…';
+      await this.submitFeedback(res, 0, real);
+    });
+
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeModal() {
+    const modal = qs('#modal');
+    if (modal) modal.classList.add('hidden');
+    document.body.style.overflow = 'auto';
+  }
+
+  async submitFeedback(res, judgment, real_measurements) {
+    if (!this.activeProfile) {
+      alert('Нет активного профиля.');
+      return;
+    }
+    const payload = {
+      garment_id: res.item_id,
+      user_id: this.activeProfile.name,
+      size_selected: res.size,
+      judgment,
+      real_measurements,
+    };
+
+    try {
+      const r = await fetch(API.feedback, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.detail || 'feedback failed');
+
+      const status = qs('#real-status');
+      if (status) status.textContent = 'Сохранено ✔';
+    } catch (e) {
+      const status = qs('#real-status');
+      if (status) status.textContent = 'Ошибка сохранения';
+      alert('Не удалось сохранить анализ (feedback).');
+    }
+  }
+
+  // --------------------
+  // Admin
+  // --------------------
+  async refreshAdmin() {
+    const box = qs('#admin-json');
+    box.textContent = 'Загрузка…';
+    try {
+      const r = await fetch(API.adminStats);
+      if (!r.ok) throw new Error('stats failed');
+      this.adminLast = await r.json();
+      box.textContent = JSON.stringify(this.adminLast, null, 2);
+    } catch (e) {
+      box.textContent = 'Не удалось загрузить admin/stats.';
+      this.adminLast = null;
+    }
+  }
+
+  downloadAdminJSON() {
+    if (!this.adminLast) return;
+    const blob = new Blob([JSON.stringify(this.adminLast, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fit_admin_${new Date().toISOString().slice(0,19).replaceAll(':','-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // --------------------
+  // DB update
+  // --------------------
+  async updateDB() {
+    const status = qs('#cabinet-status');
+    status.textContent = 'Запуск…';
+    try {
+      const r = await fetch(API.updateDb, { method: 'POST' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d?.detail || 'update failed');
+      status.textContent = d?.status || 'OK';
+      // after update: refresh results
+      if (this.activeProfileId) await this.refreshResults();
+    } catch (e) {
+      status.textContent = 'Ошибка запуска обновления.';
+    }
+  }
+
+  escape(s) {
+    return String(s ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+}
+
 window.app = new FitApp();
-window.showInput = () => window.app.showInput();
-window.showAdmin = () => window.app.showAdmin();
-window.updateDB = () => window.app.updateDB();

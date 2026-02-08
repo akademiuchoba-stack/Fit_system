@@ -7,8 +7,9 @@ import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text, inspect
 
 from . import models, database, logic, parser, calibration
 
@@ -505,23 +506,87 @@ async def read_index():
         return FileResponse(INDEX_FILE)
     raise HTTPException(status_code=404, detail="Frontend index.html not found")
 
-
-@app.get("/index.js")
-async def read_index_js():
-    """Serve the frontend JS from a stable path.
-
-    Some deployments serve / via nginx and don't route /static correctly.
-    Loading from /index.js avoids 'buttons don't work' when JS fails to load.
-    """
-    js_file = FRONTEND_DIR / "index.js"
-    if js_file.exists():
-        return FileResponse(js_file, media_type="text/javascript; charset=utf-8")
-    raise HTTPException(status_code=404, detail="Frontend index.js not found")
-
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 # -----------------------------
 # LOCAL RUN
 # -----------------------------
+
+# -------------------------
+# Admin API (read-only helpers)
+# -------------------------
+
+@app.get("/api/admin/tables")
+def admin_tables(db: Session = Depends(get_db)):
+    engine = db.get_bind()
+    insp = inspect(engine)
+    names = [n for n in insp.get_table_names()]
+    out = []
+    for name in names:
+        try:
+            cnt = db.execute(text(f"SELECT COUNT(*) AS c FROM {name}")).scalar()
+            out.append({"name": name, "rows": int(cnt or 0)})
+        except Exception:
+            out.append({"name": name, "rows": None})
+    out.sort(key=lambda x: (x["name"] or ""))
+    return {"tables": out}
+
+@app.get("/api/admin/table/{table_name}")
+def admin_table_preview(table_name: str, limit: int = 50, db: Session = Depends(get_db)):
+    engine = db.get_bind()
+    insp = inspect(engine)
+    allowed = set(insp.get_table_names())
+    if table_name not in allowed:
+        raise HTTPException(status_code=404, detail="Unknown table")
+    lim = max(1, min(int(limit or 50), 200))
+    rows = db.execute(text(f"SELECT * FROM {table_name} LIMIT :lim"), {"lim": lim}).mappings().all()
+    return {"rows": [dict(r) for r in rows]}
+
+@app.get("/api/admin/garments")
+def admin_garments(search: str = "", limit: int = 50, db: Session = Depends(get_db)):
+    lim = max(1, min(int(limit or 50), 200))
+    q = db.query(models.Garment)
+    if search:
+        s = f"%{search.strip()}%"
+        q = q.filter(
+            (models.Garment.sku.ilike(s)) |
+            (models.Garment.name.ilike(s)) |
+            (models.Garment.platform.ilike(s))
+        )
+    items = q.order_by(models.Garment.id.desc()).limit(lim).all()
+    out = []
+    for g in items:
+        out.append({
+            "id": g.id,
+            "platform": g.platform,
+            "sku": g.sku,
+            "name": g.name,
+            "in_stock": bool(g.in_stock),
+            "image_url": g.image_url,
+            "sizes": ",".join(list((g.size_metrics or {}).keys())) if isinstance(g.size_metrics, dict) else None,
+            "updated_at": getattr(g, "updated_at", None),
+        })
+    return {"items": out}
+
+@app.get("/api/admin/feedback")
+def admin_feedback(limit: int = 100, db: Session = Depends(get_db)):
+    lim = max(1, min(int(limit or 100), 500))
+    q = db.query(models.Feedback).order_by(models.Feedback.id.desc()).limit(lim).all()
+    profile_by_id = {p.id: p for p in db.query(models.BodyProfile).all()} if hasattr(models, "BodyProfile") else {}
+    garment_by_id = {g.id: g for g in db.query(models.Garment).all()}
+    out = []
+    for f in q:
+        out.append({
+            "id": f.id,
+            "profile": getattr(profile_by_id.get(getattr(f, "user_id", None), None), "name", None),
+            "garment": getattr(garment_by_id.get(getattr(f, "garment_id", None), None), "name", None),
+            "garment_sku": getattr(garment_by_id.get(getattr(f, "garment_id", None), None), "sku", None),
+            "size_selected": getattr(f, "size_selected", None),
+            "created_at": getattr(f, "created_at", None),
+            "payload": getattr(f, "payload", None),
+        })
+    return {"items": out}
+
+
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -517,7 +517,7 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 # -------------------------
 
 @app.get("/api/admin/tables")
-def admin_tables(db: Session = Depends(get_db)):
+def admin_tables(db: Session = Depends(database.get_db)):
     engine = db.get_bind()
     insp = inspect(engine)
     names = [n for n in insp.get_table_names()]
@@ -532,7 +532,7 @@ def admin_tables(db: Session = Depends(get_db)):
     return {"tables": out}
 
 @app.get("/api/admin/table/{table_name}")
-def admin_table_preview(table_name: str, limit: int = 50, db: Session = Depends(get_db)):
+def admin_table_preview(table_name: str, limit: int = 50, db: Session = Depends(database.get_db)):
     engine = db.get_bind()
     insp = inspect(engine)
     allowed = set(insp.get_table_names())
@@ -543,7 +543,7 @@ def admin_table_preview(table_name: str, limit: int = 50, db: Session = Depends(
     return {"rows": [dict(r) for r in rows]}
 
 @app.get("/api/admin/garments")
-def admin_garments(search: str = "", limit: int = 50, db: Session = Depends(get_db)):
+def admin_garments(search: str = "", limit: int = 50, db: Session = Depends(database.get_db)):
     lim = max(1, min(int(limit or 50), 200))
     q = db.query(models.Garment)
     if search:
@@ -569,7 +569,7 @@ def admin_garments(search: str = "", limit: int = 50, db: Session = Depends(get_
     return {"items": out}
 
 @app.get("/api/admin/feedback")
-def admin_feedback(limit: int = 100, db: Session = Depends(get_db)):
+def admin_feedback(limit: int = 100, db: Session = Depends(database.get_db)):
     lim = max(1, min(int(limit or 100), 500))
     q = db.query(models.Feedback).order_by(models.Feedback.id.desc()).limit(lim).all()
     profile_by_id = {p.id: p for p in db.query(models.BodyProfile).all()} if hasattr(models, "BodyProfile") else {}
@@ -590,3 +590,4 @@ def admin_feedback(limit: int = 100, db: Session = Depends(get_db)):
 
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+

@@ -1,5 +1,7 @@
 import os
+import sys
 import logging
+import subprocess
 from pathlib import Path
 from time import time
 
@@ -11,8 +13,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect
 
-from . import models, database, parser, calibration
-from . import fit_engine
+from . import models, database, logic, parser, calibration
 
 # -----------------------------
 # ЛОГИРОВАНИЕ
@@ -23,11 +24,11 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 # FASTAPI
 # -----------------------------
-app = FastAPI(title="Fit_system API", version="1.1.0")
+app = FastAPI(title="Fit_system API", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # MVP
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,16 +44,20 @@ INDEX_JS_FILE = FRONTEND_DIR / "index.js"
 ADMIN_FILE = FRONTEND_DIR / "admin.html"
 ADMIN_JS_FILE = FRONTEND_DIR / "admin.js"
 
+# shops/shop.db (используется database.py по умолчанию)
+SHOPS_DIR = BASE_DIR / "shops"
+SHOP_DB_PATH = SHOPS_DIR / "shop.db"
+
 # -----------------------------
 # ИНИЦИАЛИЗАЦИЯ БД
 # -----------------------------
 models.Base.metadata.create_all(bind=database.engine)
 
 # -----------------------------
-# КЭШ ТОВАРОВ (ускоряет /api/calculate при повторных запросах)
+# КЭШ ТОВАРОВ
 # -----------------------------
 _ITEMS_CACHE = {"ts": 0.0, "items": None}
-CACHE_TTL_SEC = int(os.getenv("FIT_ITEMS_CACHE_TTL", "30"))
+CACHE_TTL_SEC = int(os.getenv("FIT_ITEMS_CACHE_TTL", "10"))
 
 
 def get_cached_items(db: Session):
@@ -70,7 +75,7 @@ def invalidate_items_cache():
 
 
 # -----------------------------
-# API ЭНДПОИНТЫ
+# API
 # -----------------------------
 @app.get("/api/items")
 def get_items(db: Session = Depends(database.get_db)):
@@ -83,7 +88,7 @@ def get_items(db: Session = Depends(database.get_db)):
 
 
 # -----------------------------
-# PROFILES (Кабинет)
+# PROFILES
 # -----------------------------
 @app.get("/api/profiles")
 def list_profiles(db: Session = Depends(database.get_db)):
@@ -130,7 +135,6 @@ def get_profile(profile_id: int, db: Session = Depends(database.get_db)):
 
 @app.post("/api/profiles")
 def create_or_update_profile(payload: models.BodyProfileCreate, db: Session = Depends(database.get_db)):
-    # Upsert по имени — так удобнее в магазине
     existing = db.query(models.BodyProfile).filter(models.BodyProfile.name == payload.name).first()
     if existing:
         for k, v in payload.dict().items():
@@ -180,16 +184,15 @@ def delete_profile(profile_id: int, db: Session = Depends(database.get_db)):
     return {"status": "deleted"}
 
 
+# -----------------------------
+# CALCULATE
+# -----------------------------
 @app.post("/api/calculate")
 def calculate_for_profile(
     req: models.CalculateRequest,
     db: Session = Depends(database.get_db),
     limit: int = Query(20, ge=1, le=200),
 ):
-    """
-    Возвращает N лучших карточек для выбранного профиля.
-    Фронт шлёт: { profile_id: 123 } (см. frontend/index.js).
-    """
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -209,10 +212,6 @@ def calculate_for_profile(
     items = get_cached_items(db)
 
     def normalize_item_metrics(m: dict) -> dict:
-        """
-        В БД MVP часто лежат "полуобхваты" (например, грудь 54 см) вместо окружности.
-        Чтобы не ломать расчёт, приводим к окружности, если значение похоже на полуобхват.
-        """
         mm = dict(m or {})
         for k in ("chest", "waist", "hips"):
             v = mm.get(k)
@@ -252,8 +251,7 @@ def calculate_for_profile(
                 "metrics": m_norm,
             }
 
-            # ВАЖНО: алгоритм вызываем только через fit_engine (изоляция)
-            fit_res = fit_engine.calculate_fit(user_data, garment_payload, size_label=str(size_label))
+            fit_res = logic.compute_fit_score(user_data, garment_payload, size_label=str(size_label))
             if fit_res.score > best_score:
                 best_score = fit_res.score
                 best = {
@@ -277,31 +275,14 @@ def calculate_for_profile(
             results.append(best)
 
     results.sort(key=lambda x: x["fit"]["score"], reverse=True)
-
-    # Небольшая диверсификация (платформы/категории)
-    buckets = {}
-    for r in results:
-        key = (r.get("platform") or "unknown")
-        buckets.setdefault(key, []).append(r)
-
-    diversified = []
-    keys = list(buckets.keys())
-    i = 0
-    while len(diversified) < min(limit, len(results)):
-        k = keys[i % len(keys)]
-        if buckets[k]:
-            diversified.append(buckets[k].pop(0))
-        keys = [kk for kk in keys if buckets.get(kk)]
-        if not keys:
-            break
-        i += 1
-
-    return diversified[:limit]
+    return results[:limit]
 
 
+# -----------------------------
+# FEEDBACK
+# -----------------------------
 @app.post("/api/feedback")
 def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
-    logger.info(f"Feedback received for item {fb.garment_id} from {fb.user_id}")
     new_fb = models.Feedback(
         garment_id=fb.garment_id,
         user_id=fb.user_id,
@@ -326,168 +307,101 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
             prior.mu_chest = new_mu
             prior.sigma_chest = new_sigma
 
-            updated_metrics = dict(garment.metrics)
+            updated_metrics = dict(garment.metrics or {})
+            updated_metrics.setdefault(fb.size_selected, {})
             updated_metrics[fb.size_selected]["chest"] = new_mu
             garment.metrics = updated_metrics
-            logger.info(f"Bayesian update completed for {garment.sku} size {fb.size_selected}")
 
     db.commit()
     return {"status": "success"}
 
 
+# -----------------------------
+# ADMIN: Update DB (RUN PARSER + WAIT)
+# -----------------------------
 @app.post("/api/admin/update-db")
-async def update_database(db: Session = Depends(database.get_db)):
+async def admin_update_db(db: Session = Depends(database.get_db)):
     """
-    Обновляет локальную БД товаров.
-    MVP-режим:
-    - если задан env FIT_IMPORT_FILE=/path/to/items.json|jsonl|csv → импортируем оттуда.
-    - иначе оставляем демо-товары.
+    1) Запускаем локальный парсер shops/ostin_parser.py
+    2) Ждём пока он закончит (backend ждёт)
+    3) Сбрасываем кэш, чтобы лента показала свежие товары из shops/shop.db
     """
-    import_file = os.getenv("FIT_IMPORT_FILE", "").strip()
-    parsed_items = []
+    SHOPS_DIR.mkdir(parents=True, exist_ok=True)
 
-    if import_file:
-        try:
-            parsed_items = parser.load_items_from_local_file(import_file)
-            logger.info(f"Imported {len(parsed_items)} items from {import_file}")
-        except Exception as e:
-            logger.error(f"Import failed: {e}")
-            raise HTTPException(status_code=400, detail=f"Import failed: {e}")
+    # shop.db должен существовать — если нет, создадим через SQLAlchemy (таблицы Fit_system)
+    models.Base.metadata.create_all(bind=database.engine)
 
-        items_data = []
-        for it in parsed_items:
-            items_data.append(
-                {
-                    "sku": it.sku,
-                    "name": it.name,
-                    "platform": (it.brand or "").lower()
-                    or ("lamoda" if "lamoda" in (it.url or "").lower() else (it.category or "").lower() or "unknown"),
-                    "image_url": it.image_url,
-                    "metrics": it.metrics or {},
-                }
-            )
-    else:
-        items_data = [
-            {
-                "sku": "OST-99122",
-                "name": "Рубашка Oxford Regular",
-                "platform": "ostin",
-                "image_url": "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&q=80&w=800",
-                "metrics": {
-                    "M": {"chest": 54, "shoulder": 46, "sleeve": 64, "length": 72, "fit_profile": "regular"},
-                    "L": {"chest": 57, "shoulder": 48, "sleeve": 65, "length": 74, "fit_profile": "regular"},
-                },
-            },
-            {
-                "sku": "LAM-77332",
-                "name": "Свитшот Premium Cotton",
-                "platform": "lamoda",
-                "image_url": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&q=80&w=800",
-                "metrics": {
-                    "S": {"chest": 52, "shoulder": 44, "sleeve": 62, "length": 68, "fit_profile": "oversize"},
-                    "M": {"chest": 55, "shoulder": 45, "sleeve": 64, "length": 70, "fit_profile": "oversize"},
-                },
-            },
-            {
-                "sku": "OST-55411",
-                "name": "Куртка демисезонная Loft",
-                "platform": "ostin",
-                "image_url": "https://images.unsplash.com/photo-1551488831-00ddcb6c6bd3?auto=format&fit=crop&q=80&w=800",
-                "metrics": {
-                    "M": {"chest": 58, "shoulder": 48, "sleeve": 66, "length": 75, "fit_profile": "regular"},
-                    "L": {"chest": 61, "shoulder": 50, "sleeve": 67, "length": 77, "fit_profile": "regular"},
-                },
-            },
-        ]
+    parser_script = SHOPS_DIR / "ostin_parser.py"
+    if not parser_script.exists():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Parser script not found: {parser_script}. Create it (shops/ostin_parser.py).",
+        )
 
-    for item_data in items_data:
-        sku = item_data.get("sku")
-        if not sku:
-            continue
-        existing = db.query(models.Garment).filter(models.Garment.sku == sku).first()
-        if not existing:
-            existing = models.Garment(
-                sku=sku,
-                name=item_data.get("name") or sku,
-                platform=item_data.get("platform") or "unknown",
-                image_url=item_data.get("image_url"),
-                metrics=item_data.get("metrics") or {},
-                in_stock=True,
-            )
-            db.add(existing)
-            db.flush()
-        else:
-            existing.name = item_data.get("name") or existing.name
-            existing.platform = item_data.get("platform") or existing.platform
-            existing.image_url = item_data.get("image_url") or existing.image_url
-            existing.metrics = item_data.get("metrics") or existing.metrics
-            existing.in_stock = True
+    # Запускаем тем же Python, что крутит backend (важно для зависимостей)
+    python_bin = sys.executable
 
-        for size_label, m in (existing.metrics or {}).items():
-            if not isinstance(m, dict):
-                continue
-            prior = (
-                db.query(models.Prior)
-                .filter(models.Prior.garment_id == existing.id, models.Prior.size_label == str(size_label))
-                .first()
-            )
-            if prior:
-                continue
-            mu_chest = float(m.get("chest", 0) or 0)
-            mu_sleeve = float(m.get("sleeve", 0) or 0)
-            prior = models.Prior(
-                garment_id=existing.id,
-                size_label=str(size_label),
-                mu_chest=mu_chest,
-                sigma_chest=4.0,
-                mu_sleeve=mu_sleeve,
-                sigma_sleeve=2.0,
-            )
-            db.add(prior)
+    timeout_sec = int(os.getenv("FIT_PARSER_TIMEOUT", "900"))  # 15 мин по умолчанию
+    cmd = [python_bin, str(parser_script), "--db", str(SHOP_DB_PATH)]
 
-    db.commit()
+    logger.info(f"Running parser: {' '.join(cmd)} (timeout={timeout_sec}s)")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail=f"Parser timeout after {timeout_sec}s")
+
+    out_tail = (proc.stdout or "")[-4000:]
+    err_tail = (proc.stderr or "")[-4000:]
+
+    if proc.returncode != 0:
+        logger.error(f"Parser failed rc={proc.returncode} stderr_tail={err_tail}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Parser failed (rc={proc.returncode}). stderr_tail: {err_tail}",
+        )
+
+    # Обновили БД — сбросили кэш
     invalidate_items_cache()
-    return {"status": "DB updated", "import_file": import_file or None, "count": len(items_data)}
+
+    # Отдадим быстрый статус
+    count = db.query(models.Garment).count()
+    return {
+        "status": "ok",
+        "db": str(SHOP_DB_PATH),
+        "garments_total": count,
+        "stdout_tail": out_tail,
+        "stderr_tail": err_tail,
+    }
 
 
+# -----------------------------
+# ADMIN: helpers
+# -----------------------------
 @app.get("/api/admin/stats")
 def admin_stats(db: Session = Depends(database.get_db)):
-    try:
-        garments = db.query(models.Garment).count()
-        profiles = db.query(models.BodyProfile).count()
-        feedback = db.query(models.Feedback).count()
-        priors = db.query(models.Prior).count()
+    garments = db.query(models.Garment).count()
+    profiles = db.query(models.BodyProfile).count()
+    feedback = db.query(models.Feedback).count()
+    priors = db.query(models.Prior).count()
 
-        last_feedback = db.query(models.Feedback).order_by(models.Feedback.id.desc()).limit(30).all()
+    db_path = getattr(database, "DB_PATH", None)
+    db_size = None
+    if db_path and os.path.exists(db_path):
+        db_size = os.path.getsize(db_path)
 
-        db_path = getattr(database, "DB_PATH", None)
-        db_size = None
-        if db_path and os.path.exists(db_path):
-            db_size = os.path.getsize(db_path)
-
-        return {
-            "counts": {"garments": garments, "profiles": profiles, "feedback": feedback, "priors": priors},
-            "db": {"path": db_path, "size_bytes": db_size},
-            "recent_feedback": [
-                {
-                    "id": f.id,
-                    "garment_id": f.garment_id,
-                    "user_id": f.user_id,
-                    "size_selected": f.size_selected,
-                    "judgment": f.judgment,
-                    "real_measurements": f.real_measurements,
-                }
-                for f in last_feedback
-            ],
-        }
-    except Exception as e:
-        logger.error(f"admin stats error: {e}")
-        raise HTTPException(status_code=500, detail="Stats error")
+    return {
+        "counts": {"garments": garments, "profiles": profiles, "feedback": feedback, "priors": priors},
+        "db": {"path": db_path, "size_bytes": db_size},
+    }
 
 
-# -------------------------
-# Admin API (read-only helpers)
-# -------------------------
 @app.get("/api/admin/tables")
 def admin_tables(db: Session = Depends(database.get_db)):
     engine = db.get_bind()
@@ -526,65 +440,25 @@ def admin_garments(search: str = "", limit: int = 50, db: Session = Depends(data
             (models.Garment.sku.ilike(s)) | (models.Garment.name.ilike(s)) | (models.Garment.platform.ilike(s))
         )
     items = q.order_by(models.Garment.id.desc()).limit(lim).all()
-    out = []
-    for g in items:
-        metrics = getattr(g, "metrics", None)
-        sizes = ",".join(list(metrics.keys())) if isinstance(metrics, dict) else None
-        out.append(
-            {
-                "id": g.id,
-                "platform": g.platform,
-                "sku": g.sku,
-                "name": g.name,
-                "in_stock": bool(getattr(g, "in_stock", True)),
-                "image_url": getattr(g, "image_url", None),
-                "sizes": sizes,
-                "updated_at": getattr(g, "updated_at", None),
-            }
-        )
-    return {"items": out}
+    return {"items": items}
 
 
 @app.get("/api/admin/feedback")
 def admin_feedback(limit: int = 100, db: Session = Depends(database.get_db)):
     lim = max(1, min(int(limit or 100), 500))
     q = db.query(models.Feedback).order_by(models.Feedback.id.desc()).limit(lim).all()
-    profile_by_id = {p.id: p for p in db.query(models.BodyProfile).all()} if hasattr(models, "BodyProfile") else {}
-    garment_by_id = {g.id: g for g in db.query(models.Garment).all()}
-    out = []
-    for f in q:
-        out.append(
-            {
-                "id": f.id,
-                "profile": getattr(profile_by_id.get(getattr(f, "user_id", None), None), "name", None),
-                "garment": getattr(garment_by_id.get(getattr(f, "garment_id", None), None), "name", None),
-                "garment_sku": getattr(garment_by_id.get(getattr(f, "garment_id", None), None), "sku", None),
-                "size_selected": getattr(f, "size_selected", None),
-                "created_at": getattr(f, "created_at", None),
-                "payload": getattr(f, "payload", None),
-            }
-        )
-    return {"items": out}
+    return {"items": q}
 
 
 # -----------------------------
-# FRONTEND (ВАЖНО)
+# FRONTEND
 # -----------------------------
-# Раздаём любые файлы из frontend/ по /static/...
-# (на будущее: картинки, admin.js и т.п.)
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def serve_index():
-    if INDEX_FILE.exists():
-        return FileResponse(INDEX_FILE)
-    raise HTTPException(status_code=404, detail="Frontend index.html not found")
-
-
-@app.head("/", include_in_schema=False)
-def serve_index_head():
     if INDEX_FILE.exists():
         return FileResponse(INDEX_FILE)
     raise HTTPException(status_code=404, detail="Frontend index.html not found")
@@ -597,29 +471,10 @@ def serve_index_js():
     raise HTTPException(status_code=404, detail="Frontend index.js not found")
 
 
-@app.head("/index.js", include_in_schema=False)
-def serve_index_js_head():
-    if INDEX_JS_FILE.exists():
-        return FileResponse(INDEX_JS_FILE, media_type="application/javascript")
-    raise HTTPException(status_code=404, detail="Frontend index.js not found")
-
-
 @app.get("/admin", include_in_schema=False)
 def serve_admin():
     if ADMIN_FILE.exists():
         return FileResponse(ADMIN_FILE)
-    # если admin.html ещё нет — пусть открывается основной UI
-    if INDEX_FILE.exists():
-        return FileResponse(INDEX_FILE)
-    raise HTTPException(status_code=404, detail="Frontend admin.html not found")
-
-
-@app.head("/admin", include_in_schema=False)
-def serve_admin_head():
-    if ADMIN_FILE.exists():
-        return FileResponse(ADMIN_FILE)
-    if INDEX_FILE.exists():
-        return FileResponse(INDEX_FILE)
     raise HTTPException(status_code=404, detail="Frontend admin.html not found")
 
 
@@ -630,18 +485,12 @@ def serve_admin_js():
     raise HTTPException(status_code=404, detail="Frontend admin.js not found")
 
 
-@app.head("/admin.js", include_in_schema=False)
-def serve_admin_js_head():
-    if ADMIN_JS_FILE.exists():
-        return FileResponse(ADMIN_JS_FILE, media_type="application/javascript")
-    raise HTTPException(status_code=404, detail="Frontend admin.js not found")
-
-
 # -----------------------------
 # LOCAL RUN
 # -----------------------------
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 

@@ -1,6 +1,7 @@
 (() => {
   const API = {
     stats: '/api/admin/stats',
+    updateDb: '/api/admin/update-db',
     garments: (q='', limit=50) => `/api/admin/garments?search=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}`,
     profiles: '/api/profiles',
     feedback: '/api/admin/feedback?limit=100',
@@ -18,16 +19,32 @@
     if(!el) return;
     el.textContent = msg;
     show(el);
-    setTimeout(()=> hide(el), 2500);
+    setTimeout(()=> hide(el), 3000);
   }
 
   async function api(url, opts={}){
     const res = await fetch(url, {headers:{'Content-Type':'application/json'}, ...opts});
+    const ct = res.headers.get('content-type') || '';
+    const body = ct.includes('application/json') ? await res.json().catch(()=> ({})) : await res.text().catch(()=> '');
     if(!res.ok){
-      const t = await res.text().catch(()=> '');
-      throw new Error(`${res.status} ${res.statusText}${t?`: ${t}`:''}`);
+      const msg = typeof body === 'string' ? body : (body?.detail || JSON.stringify(body));
+      throw new Error(`${res.status} ${res.statusText}: ${msg}`);
     }
-    return res.json();
+    return body;
+  }
+
+  async function updateDb(){
+    const btn = qs('#btn-update-db');
+    if(btn) btn.disabled = true;
+    toast('Запускаю парсер и жду завершения...');
+
+    try{
+      const r = await api(API.updateDb, {method:'POST'});
+      toast(`Готово. Товаров в БД: ${r?.garments_total ?? '—'}`);
+      await refreshAll();
+    } finally {
+      if(btn) btn.disabled = false;
+    }
   }
 
   function renderTable(container, rows){
@@ -52,7 +69,6 @@
   async function loadOverview(){
     const data = await api(API.stats);
     const c = data?.counts || {};
-    const db = data?.db || {};
     const overview = qs('#overview');
     if(overview){
       const items = [
@@ -65,7 +81,6 @@
         <div class="p-4 rounded-2xl border border-gray-100 bg-gray-50">
           <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">${esc(k)}</div>
           <div class="mt-1 text-2xl font-black">${esc(v)}</div>
-          ${k==='Товары' && db.path ? `<div class="mt-2 text-xs text-gray-500 truncate">DB: ${esc(db.path)}</div>`:''}
         </div>
       `).join('');
     }
@@ -130,8 +145,14 @@
   }
 
   qs('#btn-refresh')?.addEventListener('click', ()=> refreshAll().catch(e=>toast(e.message)));
+  qs('#btn-update-db')?.addEventListener('click', ()=> updateDb().catch(e=>toast(e.message)));
   qs('#btn-garment-search')?.addEventListener('click', ()=> loadGarments(qs('#garment-search')?.value || '').catch(e=>toast(e.message)));
-  qs('#garment-search')?.addEventListener('keydown', (e)=> { if(e.key==='Enter'){ e.preventDefault(); loadGarments(qs('#garment-search')?.value || '').catch(err=>toast(err.message)); } });
+  qs('#garment-search')?.addEventListener('keydown', (e)=> {
+    if(e.key==='Enter'){
+      e.preventDefault();
+      loadGarments(qs('#garment-search')?.value || '').catch(err=>toast(err.message));
+    }
+  });
   qs('#btn-close-preview')?.addEventListener('click', ()=> hide(qs('#table-preview')));
 
   refreshAll().catch(e=>toast(e.message));

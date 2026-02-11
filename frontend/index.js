@@ -53,7 +53,7 @@
         btnCabinet: qs('#btn-cabinet'),
 
         btnBack: qs('#btn-back'),
-        btnRunParser: qs('#btn-run-parser'),
+        // btnRunParser перенесён в отдельный Admin UI (/admin)
         btnAdmin: qs('#btn-admin'),
 
         profiles: qs('#profiles'),
@@ -100,7 +100,7 @@
       if(this.el.btnOpenCabinet) this.el.btnOpenCabinet.addEventListener('click', ()=> this.showCabinet());
       if(this.el.btnBack) this.el.btnBack.addEventListener('click', ()=> this.showMain());
       if(this.el.btnRefresh) this.el.btnRefresh.addEventListener('click', ()=> this.refreshAll());
-      if(this.el.btnRunParser) this.el.btnRunParser.addEventListener('click', ()=> this.updateDb());
+      // обновление базы переехало в Admin UI (/admin)
 
       // ✅ FIX: separate Admin page
       if(this.el.btnAdmin) this.el.btnAdmin.addEventListener('click', ()=> { window.location.href = '/admin'; });
@@ -239,7 +239,7 @@
           } else if(act==='edit'){
             this.loadProfileIntoForm(p);
           } else if(act==='delete'){
-            this.deleteProfile(p.id, p.name).catch(err=> this.toast(err.message));
+            this.deleteProfile(p.id).catch(err=> this.toast(err.message));
           }
         });
 
@@ -248,134 +248,89 @@
     }
 
     loadProfileIntoForm(p){
-      if(!this.el.form) return;
       this.state.editProfileId = p.id;
-
-      const set = (name, val) => {
-        const el = this.el.form.querySelector(`[name="${CSS.escape(name)}"]`);
-        if(el) el.value = val ?? '';
-      };
-
-      set('id', p.id);
-      set('name', p.name);
-      set('gender', p.gender || 'male');
-      set('height', p.height);
-      set('chest', p.chest);
-      set('shoulders', p.shoulders);
-      set('waist', p.waist);
-      set('hips', p.hips);
-      set('arm_length', p.arm_length);
-      set('leg_length', p.leg_length);
-
       if(this.el.formTitle) this.el.formTitle.textContent = `Редактирование: ${p.name}`;
+      const f = this.el.form;
+      if(!f) return;
+      f.name.value = p.name ?? '';
+      f.gender.value = p.gender ?? 'male';
+      f.height.value = p.height ?? '';
+      f.chest.value = p.chest ?? '';
+      f.shoulders.value = p.shoulders ?? '';
+      f.waist.value = p.waist ?? '';
+      f.hips.value = p.hips ?? '';
+      f.arm_length.value = p.arm_length ?? '';
+      f.leg_length.value = p.leg_length ?? '';
+      f.id.value = p.id ?? '';
+
       show(this.el.btnCancelEdit);
-      this.toast('Профиль загружен в форму');
-      window.scrollTo({top: 0, behavior:'smooth'});
     }
 
     clearForm(){
       this.state.editProfileId = null;
-      if(this.el.form) this.el.form.reset();
-      const idEl = this.el.form ? this.el.form.querySelector('[name="id"]') : null;
-      if(idEl) idEl.value = '';
       if(this.el.formTitle) this.el.formTitle.textContent = 'Новый профиль';
+      const f = this.el.form;
+      if(!f) return;
+      f.reset();
+      f.id.value = '';
       hide(this.el.btnCancelEdit);
     }
 
     async saveProfileFromForm(){
-      if(!this.el.form) return;
-      const fd = new FormData(this.el.form);
-      const payload = {};
-      for(const [k,v] of fd.entries()){
-        if(k === 'id') continue;
-        if(['height','chest','shoulders','waist','hips','arm_length','leg_length'].includes(k)){
-          payload[k] = v === '' ? null : Number(v);
-          if(Number.isNaN(payload[k])) payload[k] = null;
-        } else {
-          payload[k] = v;
-        }
+      const f = this.el.form;
+      if(!f) return;
+      const payload = {
+        name: f.name.value.trim(),
+        gender: f.gender.value,
+        height: Number(f.height.value || 0),
+        chest: Number(f.chest.value || 0),
+        shoulders: Number(f.shoulders.value || 0),
+        waist: Number(f.waist.value || 0),
+        hips: Number(f.hips.value || 0),
+        arm_length: Number(f.arm_length.value || 0),
+        leg_length: Number(f.leg_length.value || 0),
+      };
+
+      if(!payload.name) throw new Error('Имя профиля обязательно');
+
+      if(this.state.editProfileId){
+        await api(`/api/profiles/${this.state.editProfileId}`, {method:'PUT', body: JSON.stringify(payload)});
+        this.toast('Профиль обновлён');
+      } else {
+        await api(`/api/profiles`, {method:'POST', body: JSON.stringify(payload)});
+        this.toast('Профиль создан');
       }
 
-      if(!payload.name || !String(payload.name).trim()){
-        this.toast('Имя обязательно');
-        return;
-      }
-
-      // normalize
-      payload.name = String(payload.name).trim();
-
-      const res = await api(API.profiles, {method:'POST', body: JSON.stringify(payload)});
       await this.loadProfiles();
       this.renderProfiles();
-
-      // set active to saved profile by name
-      const p = this.state.profiles.find(x => x.name === payload.name) || this.state.profiles[0];
-      if(p) this.setActiveProfile(p.id);
-
       this.clearForm();
-      this.toast('Сохранено');
       await this.refreshResults();
-      return res;
     }
 
-    async deleteProfile(id, name){
-      if(!confirm(`Удалить профиль "${name}"?`)) return;
-      await api(`${API.profiles}/${encodeURIComponent(id)}`, {method:'DELETE'});
-      await this.loadProfiles();
-      this.renderProfiles();
-      if(!this.state.profiles.length){
-        this.setActiveProfile(null);
-      }
+    async deleteProfile(id){
+      await api(`/api/profiles/${id}`, {method:'DELETE'});
       this.toast('Удалено');
-      await this.refreshResults();
-    }
-
-    async updateDb(){
-      this.toast('Обновляю базу...');
-      await api(API.updateDb, {method:'POST'});
-      await this.refreshResults();
-      this.toast('База обновлена');
-    }
-
-    async refreshAll(){
       await this.loadProfiles();
       this.renderProfiles();
       await this.refreshResults();
     }
 
     async refreshResults(){
-      const pid = this.state.activeProfileId;
-      if(!pid){
+      if(!this.state.activeProfileId){
         this.state.results = [];
         this.renderCards();
-        hide(this.el.cards);
-        show(this.el.emptyState);
-        if(this.el.activeProfile) this.el.activeProfile.textContent = '—';
         return;
       }
-      hide(this.el.emptyState);
-      show(this.el.cards);
-
-      const t0 = performance.now();
-      const data = await api(API.calculate(20), {method:'POST', body: JSON.stringify({profile_id: pid})});
-      const t1 = performance.now();
-
-      this.state.results = Array.isArray(data?.results) ? data.results : (Array.isArray(data) ? data : []);
+      const data = await api(API.calculate(30));
+      this.state.results = Array.isArray(data) ? data : [];
       this.renderCards();
-
-      const p = this.state.profiles.find(x=>x.id===pid);
-      if(this.el.activeProfile) this.el.activeProfile.textContent = p ? p.name : '—';
-      // subtle toast for timings (only if empty)
-      if(!this.state.results.length){
-        this.toast(`0 карточек • ${(t1-t0).toFixed(0)}ms`);
-      }
     }
 
     renderCards(){
       if(!this.el.cards) return;
       this.el.cards.innerHTML = '';
+      const list = this.state.results;
 
-      const list = this.state.results || [];
       if(!list.length){
         show(this.el.emptyState);
         return;
@@ -383,29 +338,24 @@
       hide(this.el.emptyState);
 
       for(const r of list){
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = 'text-left rounded-3xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition overflow-hidden';
-
-        const img = r.image_url || r.image || '';
-        const score = Number(r.score ?? r.match_percent ?? 0);
-        const scorePct = Number.isFinite(score) ? Math.round(score) : 0;
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition cursor-pointer';
+        const img = r?.image_url || PLACEHOLDER_IMG;
+        const score = Number(r?.score ?? 0);
+        const scoreTxt = Number.isFinite(score) ? Math.round(score) : 0;
 
         card.innerHTML = `
-          <div class="relative aspect-[4/5] bg-gray-50 min-h-[220px]">
-            <img src="${esc(img || PLACEHOLDER_IMG)}" alt="" class="absolute inset-0 w-full h-full object-cover"
-              loading="lazy" onerror="this.onerror=null; this.src='${PLACEHOLDER_IMG}';" />
-            <div class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur border border-gray-200 text-[11px] font-extrabold uppercase tracking-widest">
-              ${scorePct}%
-            </div>
+          <div class="aspect-[4/5] bg-gray-50 overflow-hidden">
+            <img src="${esc(img)}" onerror="this.src='${PLACEHOLDER_IMG}'" class="w-full h-full object-cover"/>
           </div>
           <div class="p-4">
-            <div class="font-black leading-snug line-clamp-2">${esc(r.name || '—')}</div>
-            <div class="mt-2 text-xs text-gray-600">
-              <span class="font-extrabold">SKU:</span> ${esc(r.sku || r.article || '—')}
-              <span class="mx-2">•</span>
-              <span class="font-extrabold">Размер:</span> ${esc(r.size_label || r.size || '—')}
+            <div class="font-black truncate">${esc(r?.name || r?.sku || '—')}</div>
+            <div class="text-xs text-gray-500 mt-1">${esc(r?.platform || '')} • SKU ${esc(r?.sku || '')}</div>
+            <div class="mt-3 flex items-center justify-between">
+              <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Score</div>
+              <div class="text-lg font-black">${esc(scoreTxt)}</div>
             </div>
+            <div class="mt-2 text-sm text-gray-700 line-clamp-2">${esc(r?.explain || '')}</div>
           </div>
         `;
 
@@ -416,81 +366,73 @@
 
     openModal(r){
       this.state.currentCard = r;
-      if(this.el.modalTitle) this.el.modalTitle.textContent = r.name || '—';
-      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `SKU: ${r.sku || '—'} • Размер: ${r.size_label || '—'}`;
-      if(this.el.modalScore) this.el.modalScore.textContent = `${Math.round(Number(r.score ?? 0) || 0)}%`;
-      if(this.el.modalExplain) this.el.modalExplain.textContent = r.explanation || r.reason || '—';
+      if(this.el.modalTitle) this.el.modalTitle.textContent = r?.name || r?.sku || '—';
+      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${r?.sku || ''} • size ${r?.best_size || '—'}`;
+      if(this.el.modalImage) this.el.modalImage.src = r?.image_url || PLACEHOLDER_IMG;
 
-      const img = r.image_url || r.image || '';
-      if(this.el.modalImage){
-        this.el.modalImage.src = img || PLACEHOLDER_IMG;
-        this.el.modalImage.onerror = ()=> { this.el.modalImage.src = PLACEHOLDER_IMG; };
-      }
+      if(this.el.modalScore) this.el.modalScore.textContent = String(Math.round(Number(r?.score ?? 0)));
+      if(this.el.modalExplain) this.el.modalExplain.textContent = r?.explain || '—';
 
       // metrics
-      const m = r.metrics || r.item_metrics || r.measurements || {};
-      const lines = [];
-      const pick = (k,label) => {
-        const v = m[k];
-        if(v === undefined || v === null || v === '') return;
-        lines.push(`<div class="flex items-center justify-between gap-3"><div class="text-gray-500">${esc(label)}</div><div class="font-extrabold">${esc(fmt(v))}</div></div>`);
-      };
-      pick('chest','Грудь');
-      pick('shoulders','Плечи');
-      pick('sleeve','Рукав');
-      pick('length','Длина');
-      pick('waist','Талия');
-      pick('hips','Бёдра');
+      const m = r?.metrics || {};
+      const rows = Object.entries(m).map(([k,v])=> `<div class="flex items-center justify-between gap-3 border-b border-gray-100 py-1"><div class="text-xs text-gray-500">${esc(k)}</div><div class="text-xs font-black">${esc(typeof v==='number'?fmt(v):JSON.stringify(v))}</div></div>`).join('');
+      if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = rows || `<div class="text-sm text-gray-500">Нет данных</div>`;
 
-      if(this.el.modalMetrics){
-        this.el.modalMetrics.innerHTML = lines.length ? `<div class="space-y-1">${lines.join('')}</div>` : `<div class="text-gray-500">Нет данных</div>`;
-      }
-
-      if(this.el.realSaveNote) this.el.realSaveNote.textContent = '';
+      // reset real
       if(this.el.realChest) this.el.realChest.value = '';
       if(this.el.realShoulders) this.el.realShoulders.value = '';
       if(this.el.realSleeve) this.el.realSleeve.value = '';
       if(this.el.realLength) this.el.realLength.value = '';
+      if(this.el.realSaveNote) this.el.realSaveNote.textContent = '';
 
       show(this.el.modal);
     }
 
     closeModal(){
       hide(this.el.modal);
-      this.state.currentCard = null;
     }
 
     async saveRealMeasurements(){
       const r = this.state.currentCard;
       if(!r) return;
 
-      // feedback endpoint is optional; don't crash if absent
+      const rm = {};
+      const chest = Number(this.el.realChest?.value || 0);
+      const shoulders = Number(this.el.realShoulders?.value || 0);
+      const sleeve = Number(this.el.realSleeve?.value || 0);
+      const length = Number(this.el.realLength?.value || 0);
+
+      if(chest) rm.chest = chest;
+      if(shoulders) rm.shoulders = shoulders;
+      if(sleeve) rm.sleeve = sleeve;
+      if(length) rm.length = length;
+
       const payload = {
-        garment_id: r.garment_id || r.id || null,
-        size_selected: r.size_label || r.size || null,
+        garment_id: r.id,
         user_id: this.state.activeProfileId,
-        real: {
-          chest: this.el.realChest ? Number(this.el.realChest.value || 0) || null : null,
-          shoulders: this.el.realShoulders ? Number(this.el.realShoulders.value || 0) || null : null,
-          sleeve: this.el.realSleeve ? Number(this.el.realSleeve.value || 0) || null : null,
-          length: this.el.realLength ? Number(this.el.realLength.value || 0) || null : null,
-        }
+        size_selected: r.best_size || '',
+        judgment: 'ok',
+        real_measurements: Object.keys(rm).length ? rm : null
       };
 
-      try{
-        await api(API.feedback, {method:'POST', body: JSON.stringify(payload)});
-        if(this.el.realSaveNote) this.el.realSaveNote.textContent = 'Сохранено';
-      } catch(e){
-        // if endpoint not present, at least keep note locally
-        if(this.el.realSaveNote) this.el.realSaveNote.textContent = 'Feedback эндпоинт не активен (можно добавить позже)';
-      }
+      await api(API.feedback, {method:'POST', body: JSON.stringify(payload)});
+      if(this.el.realSaveNote) this.el.realSaveNote.textContent = 'Сохранено';
+      this.toast('Feedback сохранён');
+    }
+
+    async updateDb(){
+      await api(API.updateDb, {method:'POST'});
+      this.toast('База обновлена');
+      await this.refreshResults();
+    }
+
+    async refreshAll(){
+      await this.loadProfiles();
+      this.renderProfiles();
+      await this.refreshResults();
     }
   }
 
-  // tiny polyfill for line-clamp without plugin (best effort)
-  const style = document.createElement('style');
-  style.textContent = `.line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}`;
-  document.head.appendChild(style);
-
-  window.__fitApp = new App();
+  new App();
 })();
+

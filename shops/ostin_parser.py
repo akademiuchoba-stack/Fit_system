@@ -2,8 +2,13 @@
 """
 shops/ostin_parser.py
 
-Запускается из админки.
-Парсер O'stin с усиленной маскировкой и отладкой.
+Запускается из админки (/api/admin/update-db).
+Логика:
+1. Запуск Playwright (Stealth).
+2. "Прогрев" на главной странице O'stin (обход Qrator).
+3. Парсинг каталога.
+4. Обогащение через Lamoda.
+5. Сохранение в БД с правильной структурой metrics={"M": ...}.
 """
 
 from __future__ import annotations
@@ -19,7 +24,6 @@ import logging
 import requests
 from bs4 import BeautifulSoup
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 
 # --- НАСТРОЙКА ПУТЕЙ ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,7 +34,7 @@ if project_root not in sys.path:
 from backend import database, models
 
 try:
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright, Page
 except ImportError:
     print("CRITICAL: Playwright not installed. Run: pip install playwright && playwright install chromium")
     sys.exit(1)
@@ -54,7 +58,7 @@ logging.basicConfig(level=logging.INFO, format='[parser] %(message)s')
 logger = logging.getLogger(__name__)
 
 # ==========================================
-# 1. ПАРСЕР O'STIN (Deep Stealth)
+# 1. O'STIN PARSER (Human Simulation)
 # ==========================================
 
 class OstinCatalog:
@@ -62,11 +66,10 @@ class OstinCatalog:
 
     def fetch_items(self, slug: str, limit: int) -> List[Dict]:
         items = []
-        url = f"{self.BASE_URL}/catalog/{slug}"
-        logger.info(f"O'stin (Stealth): открываю {url}")
-
+        target_url = f"{self.BASE_URL}/catalog/{slug}"
+        
         with sync_playwright() as p:
-            # Маскировка запуска браузера
+            # Запуск с максимальной маскировкой
             browser = p.chromium.launch(
                 headless=True,
                 ignore_default_args=["--enable-automation"],
@@ -74,9 +77,7 @@ class OstinCatalog:
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-blink-features=AutomationControlled',
-                    '--disable-infobars',
                     '--window-size=1920,1080',
-                    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
                 ]
             )
             
@@ -84,77 +85,58 @@ class OstinCatalog:
                 viewport={'width': 1920, 'height': 1080},
                 locale='ru-RU',
                 timezone_id='Europe/Moscow',
-                java_script_enabled=True,
-                device_scale_factor=1,
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
             )
             
-            # --- ИНЪЕКЦИИ JS (Stealth Scripts) ---
-            # 1. Скрываем webdriver
+            # JS-инъекции для скрытия headless-режима
             context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            # 2. Эмулируем плагины (headless их не имеет)
-            context.add_init_script("""
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5] 
-                });
-            """)
-            # 3. Эмулируем языки
-            context.add_init_script("""
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['ru-RU', 'ru', 'en-US', 'en']
-                });
-            """)
-
+            
             page = context.new_page()
 
             try:
-                # 1. Загрузка
-                page.goto(url, timeout=60000, wait_until='domcontentloaded')
-                
-                # ЛОГИРОВАНИЕ ЗАГОЛОВКА
-                page_title = page.title()
-                logger.info(f"Заголовок страницы: '{page_title}'")
-                
-                if "Access Denied" in page_title or "Just a moment" in page_title or "Qrator" in page_title:
-                    logger.warning("!!! ОБНАРУЖЕНА БЛОКИРОВКА (CAPTCHA/QRATOR) !!!")
-
-                # 2. Ожидание карточек
-                logger.info("Жду карточки товаров...")
+                # --- ЭТАП 1: ПРОГРЕВ (Bypass Qrator) ---
+                logger.info("🔥 Прогрев: заход на главную страницу...")
                 try:
-                    # Ждем селектор, но если не найдем - упадем в except
-                    page.wait_for_selector('div[class*="ProductCard"]', timeout=20000)
-                except Exception:
-                    logger.warning("Таймаут ожидания. Сохраняю данные для отладки...")
+                    page.goto(self.BASE_URL, timeout=40000, wait_until='domcontentloaded')
+                    time.sleep(3)
                     
-                    # --- DEBUG DUMP ---
-                    debug_html_path = os.path.join(current_dir, "debug_ostin.html")
-                    debug_png_path = os.path.join(current_dir, "debug_ostin.png")
+                    # Имитация пользователя: движения мышью
+                    page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+                    page.mouse.wheel(0, 300)
+                    time.sleep(2)
                     
-                    with open(debug_html_path, "w", encoding="utf-8") as f:
-                        f.write(page.content())
-                    
-                    try:
-                        page.screenshot(path=debug_png_path)
-                    except:
-                        pass
-                        
-                    logger.warning(f"HTML сохранен в: {debug_html_path}")
-                    logger.warning(f"Скриншот сохранен в: {debug_png_path}")
-                    logger.warning("Проверьте эти файлы, чтобы понять причину блокировки.")
+                except Exception as e:
+                    logger.warning(f"Ошибка на главной (не критично): {e}")
+
+                # --- ЭТАП 2: ПЕРЕХОД В КАТАЛОГ ---
+                logger.info(f"📂 Переход в категорию: {slug}")
+                page.goto(target_url, timeout=60000, wait_until='domcontentloaded')
+
+                # Проверка на блокировку
+                if "Access Denied" in page.title() or "заблокирован" in page.title():
+                    logger.error("⛔ Блокировка IP (Qrator). Попробуйте сменить IP или использовать прокси.")
+                    # Делаем скриншот для диагностики
+                    page.screenshot(path=os.path.join(current_dir, "block_screen.png"))
                     return []
 
-                # 3. Скролл (Lazy Load)
-                page.evaluate("window.scrollTo(0, 1000)")
-                time.sleep(2)
-
-                # 4. Парсинг
-                html_content = page.content()
-                soup = BeautifulSoup(html_content, 'html.parser')
+                # Ожидание товаров
+                try:
+                    page.wait_for_selector('div[class*="ProductCard"]', timeout=20000)
+                except:
+                    logger.warning("Таймаут ожидания карточек. Пробую скролл...")
                 
+                # Скролл для ленивой загрузки
+                for _ in range(3):
+                    page.mouse.wheel(0, 1000)
+                    time.sleep(1.5)
+
+                # Парсинг
+                soup = BeautifulSoup(page.content(), 'html.parser')
                 cards = soup.find_all('div', class_=re.compile('ProductCard_card'))
                 if not cards:
                     cards = soup.find_all('div', class_=re.compile('ProductCard'))
 
-                logger.info(f"Найдено элементов: {len(cards)}")
+                logger.info(f"Найдено карточек: {len(cards)}")
 
                 for c in cards[:limit]:
                     try:
@@ -166,18 +148,17 @@ class OstinCatalog:
                             price_str = price_tag.get_text(strip=True) if price_tag else "0"
                             price = float(re.sub(r'[^\d]', '', price_str) or 0)
                             
-                            full_url = self.BASE_URL + link_tag['href'] if link_tag['href'].startswith('/') else link_tag['href']
+                            href = link_tag['href']
+                            full_url = self.BASE_URL + href if href.startswith('/') else href
 
                             items.append({
                                 'title': title_tag.get_text(strip=True),
                                 'url': full_url,
                                 'price': price
                             })
-                    except Exception:
+                    except:
                         continue
                 
-                logger.info(f"Успешно извлечено {len(items)} товаров.")
-
             except Exception as e:
                 logger.error(f"Playwright Error: {e}")
             finally:
@@ -186,11 +167,11 @@ class OstinCatalog:
         return items
 
     def check_stock(self) -> bool:
-        return random.random() > 0.2
+        return random.random() > 0.3
 
 
 # ==========================================
-# 2. ПАРСЕР LAMODA
+# 2. LAMODA ENRICHER
 # ==========================================
 
 class LamodaEnricher:
@@ -199,7 +180,7 @@ class LamodaEnricher:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
             'Accept-Language': 'ru-RU,ru;q=0.9',
         }
 
@@ -213,7 +194,7 @@ class LamodaEnricher:
             if not link: return None
                 
             product_url = "https://www.lamoda.ru" + link['href']
-            time.sleep(random.uniform(1.0, 2.0))
+            time.sleep(random.uniform(0.5, 1.5))
             
             page_resp = self.session.get(product_url, timeout=10)
             data = self._extract_json(page_resp.text)
@@ -252,9 +233,10 @@ class LamodaEnricher:
             "fit_profile": "regular"
         }
 
+        # Парсинг атрибутов
         for attr in payload.get('attributes', []):
-            lbl = attr.get('label', '').lower()
-            val = attr.get('value', '').lower()
+            lbl = (attr.get('label') or '').lower()
+            val = (attr.get('value') or '').lower()
             
             if 'параметры модели' in lbl:
                 p = val.split('-')
@@ -274,6 +256,7 @@ class LamodaEnricher:
                 el = re.search(r'(\d+)\s*[%]*\s*эластан', val)
                 if el: metrics_pack["elastane_pct"] = int(el.group(1))
 
+        # Fit profile
         title_lower = payload.get('title', '').lower()
         if 'oversize' in title_lower or 'оверсайз' in title_lower:
             metrics_pack["fit_profile"] = "oversize"
@@ -320,8 +303,12 @@ def harvest_and_upsert(store_id: int, per_category: int, cats: dict) -> int:
                     image_url = rich['image_url']
                     raw_metrics = rich['metrics']
 
-                # Структура для backend
+                # --- КОРРЕКЦИЯ СТРУКТУРЫ ДЛЯ BACKEND ---
+                # Добавляем внутреннюю категорию
                 raw_metrics["internal_category"] = cat_name
+                
+                # Упаковываем в словарь по размерам {"M": {...}}
+                # Это позволяет api/calculate корректно итерироваться
                 structured_metrics = {"M": raw_metrics}
 
                 garment_data = {
@@ -357,8 +344,7 @@ def main():
     parser.add_argument("--db", help="Path to DB")
     args = parser.parse_args()
     
-    print(f"[parser] Store ID (fixed): {OSTIN_STORE_ID_ANGARSK}")
-
+    print(f"[parser] Store ID: {OSTIN_STORE_ID_ANGARSK}")
     count = harvest_and_upsert(OSTIN_STORE_ID_ANGARSK, LIMIT_PER_CATEGORY, {})
     print(f"[parser] Done. Processed: {count}")
 

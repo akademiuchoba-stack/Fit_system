@@ -3,14 +3,14 @@
 shops/ostin_parser.py
 
 Запускается из админки.
-1) Парсит каталог O'stin (цены, названия).
-2) Обогащает данные через Lamoda (Vendor Code, биометрия модели, состав).
-3) Сохраняет в БД (таблица garments), упаковывая данные для Fit-алгоритма в поле metrics.
+Использует Playwright (как браузер) для загрузки каталога O'stin,
+дальше парсит HTML через BeautifulSoup.
+Потом обогащает данные через Lamoda (requests) и пишет в SQLite через ORM Fit_system.
 
 ВАЖНО для совместимости с backend:
-- Garment.metrics ДОЛЖНО быть словарём по размерам: {"S": {...}, "M": {...}}
-- Даже если реальных промеров нет, мы сохраняем 1 "виртуальный" размер (например "M"),
-  чтобы /api/calculate не ломался и logic.py мог оценить промеры по model_metrics+model_size.
+- Garment.metrics ДОЛЖНО быть словарём по размерам, т.к. /api/calculate делает:
+  for size_label, raw_metrics in item.metrics.items()
+Поэтому мы сохраняем данные в виртуальный размер "M": metrics={"M": {...}}
 """
 
 from __future__ import annotations
@@ -23,9 +23,10 @@ import random
 import json
 import re
 import logging
+from typing import Dict, List, Optional, Any
+
 import requests
 from bs4 import BeautifulSoup
-from typing import Dict, List, Optional, Any
 
 # --- НАСТРОЙКА ОКРУЖЕНИЯ ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,13 +36,18 @@ if project_root not in sys.path:
 
 from backend import database, models  # noqa: E402
 
+# Playwright
+try:
+    from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+except ImportError:
+    print("CRITICAL: Playwright not installed. Run: pip install playwright && playwright install chromium")
+    sys.exit(1)
+
 # --- КОНФИГУРАЦИЯ ---
 OSTIN_STORE_ID_ANGARSK = 4219
 LIMIT_PER_CATEGORY = 10  # как ты просил
 
-# Маппинг: внутренняя категория -> slug на сайте O'stin
 CATEGORY_URLS = {
-    # women
     "women_pants": "zhenshchinam/odezhda/bryuki",
     "women_jeans": "zhenshchinam/odezhda/dzhinsy",
     "women_skirts": "zhenshchinam/odezhda/yubki",
@@ -51,7 +57,6 @@ CATEGORY_URLS = {
     "women_blouses": "zhenshchinam/odezhda/bluzki-i-rubashki",
     "women_jackets": "zhenshchinam/odezhda/verkhnyaya-odezhda",
 
-    # men
     "men_pants": "muzhchinam/odezhda/bryuki",
     "men_jeans": "muzhchinam/odezhda/dzhinsy",
     "men_shirts": "muzhchinam/odezhda/rubashki",
@@ -64,62 +69,85 @@ logger = logging.getLogger(__name__)
 
 
 # ==========================================
-# 1. КЛАССЫ ПАРСЕРА
+# 1. O'STIN PARSER (Playwright -> HTML -> BS4)
 # ==========================================
 
 class OstinCatalog:
-    """Сбор базовой инфо с сайта O'stin"""
     BASE_URL = "https://ostin.com"
 
-    def __init__(self):
-        self.session = requests.Session()
-        self.session.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-        }
+    def __init__(self, page: Page):
+        self.page = page
 
-    def fetch_items(self, slug: str, limit: int) -> List[Dict]:
-        items: List[Dict] = []
+    def fetch_items(self, slug: str, limit: int) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
         url = f"{self.BASE_URL}/catalog/{slug}"
-        logger.info(f"O'stin scan: {url}")
+        logger.info(f"O'stin (Playwright): открываю {url}")
 
         try:
-            resp = self.session.get(url, timeout=20)
-            if resp.status_code != 200:
+            self.page.goto(url, timeout=60000)
+
+            # Ждём появления чего-то, похожего на карточки (если не появится — просто вернём пусто)
+            logger.info("Жду появления карточек товаров...")
+            try:
+                self.page.wait_for_selector('div[class*="ProductCard"]', timeout=30000)
+            except Exception:
+                logger.warning("Таймаут ожидания карточек. Каталог не загрузился.")
                 return []
 
-            soup = BeautifulSoup(resp.text, 'html.parser')
+            # Небольшой скролл для lazy-load
+            self.page.evaluate("window.scrollTo(0, 800)")
+            time.sleep(1)
+
+            html_content = self.page.content()
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # Пытаемся найти карточки (как у тебя было)
             cards = soup.find_all('div', class_=re.compile('ProductCard_card'))
+            if not cards:
+                # запасной вариант — иногда классы меняются
+                cards = soup.find_all('div', class_=re.compile('ProductCard'))
 
             for c in cards[:limit]:
                 try:
                     link_tag = c.find('a', href=True)
-                    title_tag = c.find('div', class_=re.compile('ProductCard_title'))
-                    price_tag = c.find('div', class_=re.compile('ProductCard_price'))
+                    title_tag = c.find('div', class_=re.compile('ProductCard_title')) or c.find('div', class_=re.compile('title'))
+                    price_tag = c.find('div', class_=re.compile('ProductCard_price')) or c.find('div', class_=re.compile('price'))
 
-                    if link_tag and title_tag:
-                        price_str = price_tag.get_text(strip=True) if price_tag else "0"
-                        price = float(re.sub(r'[^\d]', '', price_str) or 0)
+                    if not (link_tag and title_tag):
+                        continue
 
-                        items.append({
-                            'title': title_tag.get_text(strip=True),
-                            'url': self.BASE_URL + link_tag['href'],
-                            'price': price
-                        })
+                    price_str = price_tag.get_text(strip=True) if price_tag else "0"
+                    price = float(re.sub(r'[^\d]', '', price_str) or 0)
+
+                    href = link_tag['href']
+                    if href.startswith("/"):
+                        href = self.BASE_URL + href
+
+                    items.append({
+                        'title': title_tag.get_text(strip=True),
+                        'url': href,
+                        'price': price
+                    })
                 except Exception:
                     continue
-        except Exception as e:
-            logger.error(f"Error fetching O'stin: {e}")
 
-        return items
+            logger.info(f"Получено товаров: {len(items)}")
+            return items
+
+        except Exception as e:
+            logger.error(f"Playwright Error: {e}")
+            return []
 
     def check_stock(self) -> bool:
-        # Эмуляция проверки стока в Ангарске (API закрыт)
+        # как у тебя: имитация
         return random.random() > 0.2
 
 
+# ==========================================
+# 2. LAMODA ENRICHER (requests)
+# ==========================================
+
 class LamodaEnricher:
-    """Извлечение Vendor Code и параметров модели через Lamoda"""
     SEARCH_URL = "https://www.lamoda.ru/catalogsearch/result/"
 
     def __init__(self):
@@ -129,10 +157,10 @@ class LamodaEnricher:
             'Accept-Language': 'ru-RU,ru;q=0.9',
         }
 
-    def enrich(self, title: str) -> Optional[Dict]:
+    def enrich(self, title: str) -> Optional[Dict[str, Any]]:
         try:
             params = {'q': f"O'stin {title}", 'submit': 'y'}
-            resp = self.session.get(self.SEARCH_URL, params=params, timeout=10)
+            resp = self.session.get(self.SEARCH_URL, params=params, timeout=15)
             soup = BeautifulSoup(resp.text, 'html.parser')
 
             link = soup.find('a', class_=re.compile('ProductCard-link'))
@@ -140,10 +168,9 @@ class LamodaEnricher:
                 return None
 
             product_url = "https://www.lamoda.ru" + link['href']
+            time.sleep(random.uniform(1.0, 2.0))
 
-            time.sleep(random.uniform(1.5, 3.0))
-            page_resp = self.session.get(product_url, timeout=10)
-
+            page_resp = self.session.get(product_url, timeout=15)
             data = self._extract_json(page_resp.text)
             if not data:
                 return None
@@ -154,11 +181,11 @@ class LamodaEnricher:
             logger.warning(f"Lamoda enrich failed: {e}")
             return None
 
-    def _extract_json(self, html: str) -> Optional[Dict]:
+    def _extract_json(self, html: str) -> Optional[Dict[str, Any]]:
         m = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', html, re.DOTALL)
         return json.loads(m.group(1)) if m else None
 
-    def _parse_json(self, data: Dict, url: str) -> Dict:
+    def _parse_json(self, data: Dict[str, Any], url: str) -> Dict[str, Any]:
         payload = data.get('payload', {}).get('product', {})
         if not payload:
             payload = data.get('state', {}).get('product', {}).get('result', {})
@@ -174,8 +201,7 @@ class LamodaEnricher:
             if src:
                 img = f"https:{src}" if src.startswith('//') else src
 
-        # Пакет для Fit-алгоритма (будет вложен в metrics["M"])
-        metrics_pack = {
+        metrics_pack: Dict[str, Any] = {
             "model_metrics": {},
             "model_size": None,
             "elastane_pct": 0,
@@ -213,7 +239,7 @@ class LamodaEnricher:
         title_lower = (payload.get('title', '') or '').lower()
         if 'oversize' in title_lower or 'оверсайз' in title_lower:
             metrics_pack["fit_profile"] = "oversize"
-        elif 'slim' in title_lower or 'притален' in title_lower:
+        elif 'slim' in title_lower:
             metrics_pack["fit_profile"] = "slim"
 
         return {
@@ -224,19 +250,11 @@ class LamodaEnricher:
 
 
 # ==========================================
-# 2. ЛОГИКА ОБНОВЛЕНИЯ БД
+# 3. UPSERT LOGIC
 # ==========================================
 
-def harvest_and_upsert(store_id: int, per_category: int, cats: dict) -> int:
-    """
-    Основной процесс обновления.
-    Использует ORM backend.models для записи.
-    """
-
+def harvest_and_upsert(ostin: OstinCatalog, lamoda: LamodaEnricher, per_category: int) -> int:
     models.Base.metadata.create_all(bind=database.engine)
-
-    ostin = OstinCatalog()
-    lamoda = LamodaEnricher()
 
     total_processed = 0
 
@@ -251,39 +269,35 @@ def harvest_and_upsert(store_id: int, per_category: int, cats: dict) -> int:
 
                 if not rich:
                     sku = f"OST-{abs(hash(item['title']))}"
-                    image_url = ""
                     metrics_pack = {
                         "fit_profile": "regular",
                         "model_metrics": {},
                         "model_size": None,
-                        "fabric": "",
                         "elastane_pct": 0,
+                        "fabric": "",
                     }
-                    logger.info(f"Skipped enrichment: {item['title']}")
+                    image_url = ""
                 else:
                     sku = rich['sku']
+                    metrics_pack = rich['metrics']
                     image_url = rich['image_url']
-                    metrics_pack = rich['metrics'] or {}
 
-                # ВАЖНО: сохраняем как словарь по размерам (хотя бы один "виртуальный" размер),
-                # иначе /api/calculate будет ломаться
+                # ВАЖНО: формат по размерам для backend
                 metrics_by_size = {
                     "M": {
-                        **metrics_pack,
+                        **(metrics_pack or {}),
                         "internal_category": cat_name,
                     }
                 }
-
-                in_stock = ostin.check_stock()
 
                 garment_data = {
                     "sku": sku,
                     "name": item['title'],
                     "platform": "ostin",
-                    "price": item['price'],
+                    "price": item.get('price', 0),
                     "image_url": image_url,
                     "metrics": metrics_by_size,
-                    "in_stock": in_stock
+                    "in_stock": bool(ostin.check_stock()),
                 }
 
                 existing = db.query(models.Garment).filter(models.Garment.sku == sku).first()
@@ -298,26 +312,41 @@ def harvest_and_upsert(store_id: int, per_category: int, cats: dict) -> int:
                     total_processed += 1
                     logger.info(f"Saved: {item['title']} [{sku}]")
                 except Exception as e:
-                    logger.error(f"DB Error: {e}")
                     db.rollback()
+                    logger.error(f"DB Error: {e}")
 
     return total_processed
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--db", help="Path to DB (ignored, using backend config)")
-    _ = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--db", help="Path to DB (backend uses its own path; arg kept for compatibility)")
+    _ = ap.parse_args()
 
-    print("[parser] Starting update cycle...")
+    logger.info(f"Store ID (fixed): {OSTIN_STORE_ID_ANGARSK}")
 
-    count = harvest_and_upsert(
-        store_id=OSTIN_STORE_ID_ANGARSK,
-        per_category=LIMIT_PER_CATEGORY,
-        cats={}
-    )
+    lamoda = LamodaEnricher()
 
-    print(f"[parser] Done. Processed: {count}")
+    # Один браузер на весь запуск (оптимизация без изменения логики)
+    with sync_playwright() as p:
+        browser: Browser = p.chromium.launch(
+            headless=True,
+            args=['--no-sandbox', '--disable-setuid-sandbox']
+        )
+        context: BrowserContext = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page: Page = context.new_page()
+
+        try:
+            ostin = OstinCatalog(page)
+            count = harvest_and_upsert(ostin, lamoda, LIMIT_PER_CATEGORY)
+        finally:
+            context.close()
+            browser.close()
+
+    logger.info(f"Done. Processed: {count}")
     return 0
 
 

@@ -4,9 +4,10 @@ import logging
 import subprocess
 from pathlib import Path
 from time import time
+from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 # FASTAPI
 # -----------------------------
-app = FastAPI(title="Fit_system API", version="1.2.0")
+app = FastAPI(title="Fit_system API", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +44,10 @@ INDEX_FILE = FRONTEND_DIR / "index.html"
 INDEX_JS_FILE = FRONTEND_DIR / "index.js"
 ADMIN_FILE = FRONTEND_DIR / "admin.html"
 ADMIN_JS_FILE = FRONTEND_DIR / "admin.js"
+
+# Ручной сборщик (если файлы есть)
+BUILDER_FILE = FRONTEND_DIR / "builder.html"
+BUILDER_JS_FILE = FRONTEND_DIR / "builder.js"
 
 # shops/shop.db (используется database.py по умолчанию)
 SHOPS_DIR = BASE_DIR / "shops"
@@ -75,7 +80,15 @@ def invalidate_items_cache():
 
 
 # -----------------------------
-# API
+# HEALTH
+# -----------------------------
+@app.get("/api/health")
+def api_health():
+    return {"status": "ok"}
+
+
+# -----------------------------
+# API ITEMS
 # -----------------------------
 @app.get("/api/items")
 def get_items(db: Session = Depends(database.get_db)):
@@ -338,9 +351,7 @@ async def admin_update_db(db: Session = Depends(database.get_db)):
             detail=f"Parser script not found: {parser_script}. Create it (shops/ostin_parser.py).",
         )
 
-    # Запускаем тем же Python, что крутит backend (важно для зависимостей)
     python_bin = sys.executable
-
     timeout_sec = int(os.getenv("FIT_PARSER_TIMEOUT", "900"))  # 15 мин по умолчанию
     cmd = [python_bin, str(parser_script), "--db", str(SHOP_DB_PATH)]
 
@@ -367,10 +378,7 @@ async def admin_update_db(db: Session = Depends(database.get_db)):
             detail=f"Parser failed (rc={proc.returncode}). stderr_tail: {err_tail}",
         )
 
-    # Обновили БД — сбросили кэш
     invalidate_items_cache()
-
-    # Отдадим быстрый статус
     count = db.query(models.Garment).count()
     return {
         "status": "ok",
@@ -378,6 +386,159 @@ async def admin_update_db(db: Session = Depends(database.get_db)):
         "garments_total": count,
         "stdout_tail": out_tail,
         "stderr_tail": err_tail,
+    }
+
+
+# -----------------------------
+# ADMIN: MANUAL BUILDER (save real measurements + try-on)
+# -----------------------------
+def _coerce_float(x: Any) -> Optional[float]:
+    try:
+        if x is None:
+            return None
+        if isinstance(x, bool):
+            return float(int(x))
+        s = str(x).strip().replace(",", ".")
+        if s == "":
+            return None
+        return float(s)
+    except Exception:
+        return None
+
+
+@app.post("/api/admin/builder/upsert")
+def admin_builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(database.get_db)):
+    """
+    Сохраняет/обновляет товар в garments, включая:
+    - реальные замеры (metrics[size].real_measurements)
+    - примерку (metrics[size].try_on)
+    """
+    sku = (payload.get("sku") or "").strip()
+    if not sku:
+        raise HTTPException(status_code=400, detail="sku is required")
+
+    name = (payload.get("name") or "").strip() or sku
+    platform = (payload.get("platform") or "ostin").strip()
+    image_url = (payload.get("image_url") or "").strip()
+    price = _coerce_float(payload.get("price"))
+
+    size_label = (payload.get("size_label") or payload.get("model_size") or "M").strip().upper()
+    fit_profile = (payload.get("fit_profile") or "regular").strip().lower()
+    fabric = (payload.get("fabric") or "").strip()
+    elastane_pct = _coerce_float(payload.get("elastane_pct"))
+
+    # Эти поля ты будешь вносить после магазина:
+    real_measurements = payload.get("real_measurements") or {}
+    try_on = payload.get("try_on") or {}
+
+    # Можно хранить ещё “служебные” поля (категория/пол/тип)
+    internal_category = (payload.get("internal_category") or "").strip()
+    gender = (payload.get("gender") or "").strip()
+    category_type = (payload.get("category_type") or "").strip()
+
+    # Поддерживаем модельные параметры (если вставляешь из Lamoda текстом)
+    model_metrics = payload.get("model_metrics") or {}
+    model_size = (payload.get("model_size") or None)
+
+    existing = db.query(models.Garment).filter(models.Garment.sku == sku).first()
+
+    if existing:
+        g = existing
+    else:
+        g = models.Garment(sku=sku)
+
+    g.name = name
+    g.platform = platform
+    if price is not None:
+        g.price = float(price)
+    if image_url:
+        g.image_url = image_url
+    g.in_stock = bool(payload.get("in_stock", True))
+
+    metrics_all = dict(g.metrics or {})
+    metrics_all.setdefault(size_label, {})
+    size_block = dict(metrics_all.get(size_label) or {})
+
+    # обновляем блок размера
+    if fit_profile:
+        size_block["fit_profile"] = fit_profile
+    if fabric:
+        size_block["fabric"] = fabric
+    if elastane_pct is not None:
+        size_block["elastane_pct"] = float(elastane_pct)
+    if internal_category:
+        size_block["internal_category"] = internal_category
+    if gender:
+        size_block["gender"] = gender
+    if category_type:
+        size_block["category_type"] = category_type
+
+    if model_size:
+        size_block["model_size"] = model_size
+    if model_metrics:
+        size_block["model_metrics"] = model_metrics
+
+    # ключевое: реальные замеры + примерка
+    if isinstance(real_measurements, dict) and real_measurements:
+        size_block["real_measurements"] = real_measurements
+    if isinstance(try_on, dict) and try_on:
+        size_block["try_on"] = try_on
+
+    metrics_all[size_label] = size_block
+    g.metrics = metrics_all
+
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+
+    invalidate_items_cache()
+    return {"ok": True, "action": "updated" if existing else "created", "sku": sku, "id": g.id, "size": size_label}
+
+
+@app.get("/api/admin/builder/list")
+def admin_builder_list(limit: int = 50, db: Session = Depends(database.get_db)):
+    lim = max(1, min(int(limit or 50), 200))
+    items = db.query(models.Garment).order_by(models.Garment.id.desc()).limit(lim).all()
+    return {"items": items}
+
+
+@app.get("/api/admin/builder/analysis")
+def admin_builder_analysis(db: Session = Depends(database.get_db)):
+    """
+    Простая аналитика по введённым примеркам:
+    считает сколько size-блоков имеют try_on, и сколько отмечено ideal_for_me=true
+    """
+    garments = db.query(models.Garment).all()
+
+    total_tryons = 0
+    total_ideal = 0
+    by_category: Dict[str, Dict[str, int]] = {}
+
+    for g in garments:
+        if not g.metrics:
+            continue
+        for size_label, block in (g.metrics or {}).items():
+            if not isinstance(block, dict):
+                continue
+            try_on = block.get("try_on")
+            if not isinstance(try_on, dict) or not try_on:
+                continue
+
+            total_tryons += 1
+            ideal = bool(try_on.get("ideal_for_me"))
+            if ideal:
+                total_ideal += 1
+
+            cat = (block.get("internal_category") or block.get("category_type") or "unknown").strip() or "unknown"
+            by_category.setdefault(cat, {"tryons": 0, "ideal": 0})
+            by_category[cat]["tryons"] += 1
+            if ideal:
+                by_category[cat]["ideal"] += 1
+
+    return {
+        "tryons_total": total_tryons,
+        "ideal_total": total_ideal,
+        "by_category": by_category,
     }
 
 
@@ -451,7 +612,7 @@ def admin_feedback(limit: int = 100, db: Session = Depends(database.get_db)):
 
 
 # -----------------------------
-# FRONTEND
+# FRONTEND (static + pages)
 # -----------------------------
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
@@ -485,11 +646,27 @@ def serve_admin_js():
     raise HTTPException(status_code=404, detail="Frontend admin.js not found")
 
 
+# Ручной сборщик (если файлы добавлены)
+@app.get("/builder", include_in_schema=False)
+def serve_builder():
+    if BUILDER_FILE.exists():
+        return FileResponse(BUILDER_FILE)
+    raise HTTPException(status_code=404, detail="Frontend builder.html not found")
+
+
+@app.get("/builder.js", include_in_schema=False)
+def serve_builder_js():
+    if BUILDER_JS_FILE.exists():
+        return FileResponse(BUILDER_JS_FILE, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Frontend builder.js not found")
+
+
 # -----------------------------
 # LOCAL RUN
 # -----------------------------
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 

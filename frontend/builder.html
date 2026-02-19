@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-6">
+  <h1 class="text-2xl mb-4">Ручной сборщик</h1>
+
+  <input id="sku" placeholder="SKU" class="block mb-2 p-2 text-black">
+  <input id="name" placeholder="Название" class="block mb-2 p-2 text-black">
+  <input id="price" placeholder="Цена" class="block mb-2 p-2 text-black">
+  <input id="model_size" placeholder="Размер модели" class="block mb-2 p-2 text-black">
+  <input id="fit_profile" placeholder="fit_profile (regular/slim/oversize)" class="block mb-2 p-2 text-black">
+
+  <textarea id="text" placeholder="Вставь описание..." class="block mb-2 p-2 text-black w-full h-32"></textarea>
+
+  <h2 class="mt-4">Реальные замеры</h2>
+  <input id="chest_g" placeholder="Chest garment" class="block mb-2 p-2 text-black">
+  <input id="waist_g" placeholder="Waist garment" class="block mb-2 p-2 text-black">
+  <input id="hips_g" placeholder="Hips garment" class="block mb-2 p-2 text-black">
+
+  <h2 class="mt-4">Примерка</h2>
+  <input id="fit_score" placeholder="fit_score_real (-2..2)" class="block mb-2 p-2 text-black">
+  <input id="notes" placeholder="Комментарий" class="block mb-2 p-2 text-black">
+
+  <button onclick="save()" class="bg-green-500 px-4 py-2 mt-4">Сохранить</button>
+
+  <script src="/builder.js"></script>
+</body>
+</html>

@@ -4,7 +4,7 @@ import logging
 import subprocess
 from pathlib import Path
 from time import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional, List
 
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Query, Body
@@ -12,20 +12,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, or_
 
-from . import models, database, logic, parser, calibration
+from . import models, database, logic, calibration
 
 # -----------------------------
-# ЛОГИРОВАНИЕ
+# LOGGING
 # -----------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("fit_backend")
 
 # -----------------------------
-# FASTAPI
+# FASTAPI APP
 # -----------------------------
-app = FastAPI(title="Fit_system API", version="1.3.0")
+app = FastAPI(title="Fit_system API", version="1.5.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,33 +36,35 @@ app.add_middleware(
 )
 
 # -----------------------------
-# ПУТИ
+# PATHS
 # -----------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
+SHOPS_DIR = BASE_DIR / "shops"
+SHOP_DB_PATH = SHOPS_DIR / "shop.db"
+
 INDEX_FILE = FRONTEND_DIR / "index.html"
 INDEX_JS_FILE = FRONTEND_DIR / "index.js"
 ADMIN_FILE = FRONTEND_DIR / "admin.html"
 ADMIN_JS_FILE = FRONTEND_DIR / "admin.js"
-
-# Ручной сборщик (если файлы есть)
 BUILDER_FILE = FRONTEND_DIR / "builder.html"
 BUILDER_JS_FILE = FRONTEND_DIR / "builder.js"
 
-# shops/shop.db (используется database.py по умолчанию)
-SHOPS_DIR = BASE_DIR / "shops"
-SHOP_DB_PATH = SHOPS_DIR / "shop.db"
-
 # -----------------------------
-# ИНИЦИАЛИЗАЦИЯ БД
+# INIT DB
 # -----------------------------
 models.Base.metadata.create_all(bind=database.engine)
 
 # -----------------------------
-# КЭШ ТОВАРОВ
+# CACHE ITEMS
 # -----------------------------
 _ITEMS_CACHE = {"ts": 0.0, "items": None}
 CACHE_TTL_SEC = int(os.getenv("FIT_ITEMS_CACHE_TTL", "10"))
+
+
+def invalidate_items_cache():
+    _ITEMS_CACHE["items"] = None
+    _ITEMS_CACHE["ts"] = 0.0
 
 
 def get_cached_items(db: Session):
@@ -74,9 +76,41 @@ def get_cached_items(db: Session):
     return _ITEMS_CACHE["items"]
 
 
-def invalidate_items_cache():
-    _ITEMS_CACHE["items"] = None
-    _ITEMS_CACHE["ts"] = 0.0
+def _coerce_float(x: Any) -> Optional[float]:
+    try:
+        if x is None:
+            return None
+        s = str(x).strip().replace(",", ".")
+        if s == "":
+            return None
+        return float(s)
+    except Exception:
+        return None
+
+
+def garment_to_dict(g: models.Garment) -> Dict[str, Any]:
+    return {
+        "id": g.id,
+        "sku": g.sku,
+        "name": g.name,
+        "platform": g.platform,
+        "image_url": g.image_url,
+        "price": g.price,
+        "in_stock": bool(g.in_stock),
+        "metrics": g.metrics or {},
+    }
+
+
+def feedback_to_dict(f: models.Feedback) -> Dict[str, Any]:
+    return {
+        "id": getattr(f, "id", None),
+        "garment_id": getattr(f, "garment_id", None),
+        "user_id": getattr(f, "user_id", None),
+        "size_selected": getattr(f, "size_selected", None),
+        "judgment": getattr(f, "judgment", None),
+        "real_measurements": getattr(f, "real_measurements", None),
+        "created_at": getattr(f, "created_at", None).isoformat() if getattr(f, "created_at", None) else None,
+    }
 
 
 # -----------------------------
@@ -88,20 +122,20 @@ def api_health():
 
 
 # -----------------------------
-# API ITEMS
+# ITEMS (JSON SAFE)
 # -----------------------------
 @app.get("/api/items")
 def get_items(db: Session = Depends(database.get_db)):
     try:
         items = get_cached_items(db)
-        return items
+        return [garment_to_dict(g) for g in items]
     except Exception as e:
-        logger.error(f"Error fetching items: {e}")
-        raise HTTPException(status_code=500, detail="Database error")
+        logger.exception("Error fetching items")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # -----------------------------
-# PROFILES
+# PROFILES CRUD
 # -----------------------------
 @app.get("/api/profiles")
 def list_profiles(db: Session = Depends(database.get_db)):
@@ -198,13 +232,13 @@ def delete_profile(profile_id: int, db: Session = Depends(database.get_db)):
 
 
 # -----------------------------
-# CALCULATE
+# CALCULATE (FOR FRONT CARDS)
 # -----------------------------
 @app.post("/api/calculate")
 def calculate_for_profile(
     req: models.CalculateRequest,
     db: Session = Depends(database.get_db),
-    limit: int = Query(20, ge=1, le=200),
+    limit: int = Query(30, ge=1, le=200),
 ):
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
     if not profile:
@@ -218,76 +252,71 @@ def calculate_for_profile(
         "shoulders": profile.shoulders,
         "waist": profile.waist,
         "hips": profile.hips,
-        "arm": profile.arm_length,
-        "leg": profile.leg_length,
+        "arm_length": profile.arm_length,
+        "leg_length": profile.leg_length,
     }
 
     items = get_cached_items(db)
-
-    def normalize_item_metrics(m: dict) -> dict:
-        mm = dict(m or {})
-        for k in ("chest", "waist", "hips"):
-            v = mm.get(k)
-            try:
-                v = float(v)
-            except Exception:
-                continue
-            u = user_data.get(k)
-            if u and u > 90 and v < 80:
-                mm[k] = v * 2.0
-        if "shoulder" in mm and "shoulders" not in mm:
-            mm["shoulders"] = mm.pop("shoulder")
-        return mm
-
-    results = []
+    results: List[Dict[str, Any]] = []
 
     for item in items:
-        if not item.metrics:
+        all_sizes = item.metrics or {}
+        if not isinstance(all_sizes, dict) or not all_sizes:
             continue
 
-        best = None
-        best_score = -1.0
+        best_score = -1e18
+        best_size = None
+        best_explain = ""
+        best_metrics = None
 
-        for size_label, raw_metrics in (item.metrics or {}).items():
-            m_norm = normalize_item_metrics(raw_metrics or {})
+        for size_label, m in all_sizes.items():
+            if not isinstance(m, dict):
+                continue
+
+            m_norm = dict(m)
+            # подстраховка по ключам
+            if "shoulder" in m_norm and "shoulders" not in m_norm:
+                m_norm["shoulders"] = m_norm["shoulder"]
+
             garment_payload = {
                 "id": item.id,
                 "sku": item.sku,
                 "name": item.name,
                 "platform": item.platform,
                 "image_url": item.image_url,
+                "metrics": m_norm,
                 "fit_profile": (m_norm.get("fit_profile") or "regular"),
                 "fabric": (m_norm.get("fabric") or ""),
                 "elastane_pct": m_norm.get("elastane_pct"),
                 "model_metrics": m_norm.get("model_metrics"),
                 "model_size": m_norm.get("model_size"),
-                "metrics": m_norm,
             }
 
             fit_res = logic.compute_fit_score(user_data, garment_payload, size_label=str(size_label))
+
             if fit_res.score > best_score:
                 best_score = fit_res.score
-                best = {
-                    "item_id": item.id,
-                    "sku": item.sku,
-                    "name": item.name,
-                    "platform": item.platform,
-                    "image": item.image_url,
-                    "size": str(size_label),
-                    "fit": {
-                        "score": round(fit_res.score, 2),
-                        "status": fit_res.status,
-                        "explanation": fit_res.explanation,
-                        "deltas_cm": fit_res.deltas_cm,
-                        "warnings": fit_res.warnings,
-                    },
-                    "metrics": m_norm,
-                }
+                best_size = str(size_label)
+                best_explain = fit_res.explanation or ""
+                best_metrics = m_norm
 
-        if best:
-            results.append(best)
+        if best_size is None:
+            continue
 
-    results.sort(key=lambda x: x["fit"]["score"], reverse=True)
+        results.append({
+            "id": item.id,
+            "sku": item.sku,
+            "name": item.name,
+            "platform": item.platform,
+            "image_url": item.image_url,
+            "price": item.price,
+            "best_size": best_size,
+            "score": float(best_score),
+            "explain": best_explain,
+            "metrics": best_metrics or {},
+        })
+
+    results.sort(key=lambda x: x.get("score", 0), reverse=True)
     return results[:limit]
 
 
@@ -296,15 +325,19 @@ def calculate_for_profile(
 # -----------------------------
 @app.post("/api/feedback")
 def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
+    # user_id в модели может быть str, а фронт шлёт int → приводим к str
+    user_id_str = str(fb.user_id)
+
     new_fb = models.Feedback(
         garment_id=fb.garment_id,
-        user_id=fb.user_id,
+        user_id=user_id_str,
         size_selected=fb.size_selected,
         judgment=fb.judgment,
         real_measurements=fb.real_measurements,
     )
     db.add(new_fb)
 
+    # байес-апдейт по груди (если есть)
     if fb.real_measurements:
         garment = db.query(models.Garment).filter(models.Garment.id == fb.garment_id).first()
         prior = (
@@ -312,8 +345,7 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
             .filter(models.Prior.garment_id == fb.garment_id, models.Prior.size_label == fb.size_selected)
             .first()
         )
-
-        if prior and "chest" in fb.real_measurements:
+        if prior and garment and isinstance(fb.real_measurements, dict) and ("chest" in fb.real_measurements):
             new_mu, new_sigma = calibration.bayesian_update(
                 prior.mu_chest, prior.sigma_chest, fb.real_measurements["chest"]
             )
@@ -322,7 +354,8 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
 
             updated_metrics = dict(garment.metrics or {})
             updated_metrics.setdefault(fb.size_selected, {})
-            updated_metrics[fb.size_selected]["chest"] = new_mu
+            if isinstance(updated_metrics[fb.size_selected], dict):
+                updated_metrics[fb.size_selected]["chest"] = new_mu
             garment.metrics = updated_metrics
 
     db.commit()
@@ -330,32 +363,21 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
 
 
 # -----------------------------
-# ADMIN: Update DB (RUN PARSER + WAIT)
+# ADMIN: UPDATE DB (RUN PARSER AND WAIT)
 # -----------------------------
 @app.post("/api/admin/update-db")
-async def admin_update_db(db: Session = Depends(database.get_db)):
-    """
-    1) Запускаем локальный парсер shops/ostin_parser.py
-    2) Ждём пока он закончит (backend ждёт)
-    3) Сбрасываем кэш, чтобы лента показала свежие товары из shops/shop.db
-    """
+def admin_update_db(db: Session = Depends(database.get_db)):
     SHOPS_DIR.mkdir(parents=True, exist_ok=True)
-
-    # shop.db должен существовать — если нет, создадим через SQLAlchemy (таблицы Fit_system)
-    models.Base.metadata.create_all(bind=database.engine)
 
     parser_script = SHOPS_DIR / "ostin_parser.py"
     if not parser_script.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"Parser script not found: {parser_script}. Create it (shops/ostin_parser.py).",
-        )
+        raise HTTPException(status_code=500, detail=f"Parser script not found: {parser_script}")
 
     python_bin = sys.executable
-    timeout_sec = int(os.getenv("FIT_PARSER_TIMEOUT", "900"))  # 15 мин по умолчанию
+    timeout_sec = int(os.getenv("FIT_PARSER_TIMEOUT", "900"))
     cmd = [python_bin, str(parser_script), "--db", str(SHOP_DB_PATH)]
 
-    logger.info(f"Running parser: {' '.join(cmd)} (timeout={timeout_sec}s)")
+    logger.info("Running parser: %s", " ".join(cmd))
 
     try:
         proc = subprocess.run(
@@ -372,178 +394,16 @@ async def admin_update_db(db: Session = Depends(database.get_db)):
     err_tail = (proc.stderr or "")[-4000:]
 
     if proc.returncode != 0:
-        logger.error(f"Parser failed rc={proc.returncode} stderr_tail={err_tail}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Parser failed (rc={proc.returncode}). stderr_tail: {err_tail}",
-        )
+        logger.error("Parser failed rc=%s stderr_tail=%s", proc.returncode, err_tail)
+        raise HTTPException(status_code=500, detail=f"Parser failed rc={proc.returncode}. {err_tail}")
 
     invalidate_items_cache()
     count = db.query(models.Garment).count()
-    return {
-        "status": "ok",
-        "db": str(SHOP_DB_PATH),
-        "garments_total": count,
-        "stdout_tail": out_tail,
-        "stderr_tail": err_tail,
-    }
+    return {"status": "ok", "garments_total": count, "stdout_tail": out_tail, "stderr_tail": err_tail}
 
 
 # -----------------------------
-# ADMIN: MANUAL BUILDER (save real measurements + try-on)
-# -----------------------------
-def _coerce_float(x: Any) -> Optional[float]:
-    try:
-        if x is None:
-            return None
-        if isinstance(x, bool):
-            return float(int(x))
-        s = str(x).strip().replace(",", ".")
-        if s == "":
-            return None
-        return float(s)
-    except Exception:
-        return None
-
-
-@app.post("/api/admin/builder/upsert")
-def admin_builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(database.get_db)):
-    """
-    Сохраняет/обновляет товар в garments, включая:
-    - реальные замеры (metrics[size].real_measurements)
-    - примерку (metrics[size].try_on)
-    """
-    sku = (payload.get("sku") or "").strip()
-    if not sku:
-        raise HTTPException(status_code=400, detail="sku is required")
-
-    name = (payload.get("name") or "").strip() or sku
-    platform = (payload.get("platform") or "ostin").strip()
-    image_url = (payload.get("image_url") or "").strip()
-    price = _coerce_float(payload.get("price"))
-
-    size_label = (payload.get("size_label") or payload.get("model_size") or "M").strip().upper()
-    fit_profile = (payload.get("fit_profile") or "regular").strip().lower()
-    fabric = (payload.get("fabric") or "").strip()
-    elastane_pct = _coerce_float(payload.get("elastane_pct"))
-
-    # Эти поля ты будешь вносить после магазина:
-    real_measurements = payload.get("real_measurements") or {}
-    try_on = payload.get("try_on") or {}
-
-    # Можно хранить ещё “служебные” поля (категория/пол/тип)
-    internal_category = (payload.get("internal_category") or "").strip()
-    gender = (payload.get("gender") or "").strip()
-    category_type = (payload.get("category_type") or "").strip()
-
-    # Поддерживаем модельные параметры (если вставляешь из Lamoda текстом)
-    model_metrics = payload.get("model_metrics") or {}
-    model_size = (payload.get("model_size") or None)
-
-    existing = db.query(models.Garment).filter(models.Garment.sku == sku).first()
-
-    if existing:
-        g = existing
-    else:
-        g = models.Garment(sku=sku)
-
-    g.name = name
-    g.platform = platform
-    if price is not None:
-        g.price = float(price)
-    if image_url:
-        g.image_url = image_url
-    g.in_stock = bool(payload.get("in_stock", True))
-
-    metrics_all = dict(g.metrics or {})
-    metrics_all.setdefault(size_label, {})
-    size_block = dict(metrics_all.get(size_label) or {})
-
-    # обновляем блок размера
-    if fit_profile:
-        size_block["fit_profile"] = fit_profile
-    if fabric:
-        size_block["fabric"] = fabric
-    if elastane_pct is not None:
-        size_block["elastane_pct"] = float(elastane_pct)
-    if internal_category:
-        size_block["internal_category"] = internal_category
-    if gender:
-        size_block["gender"] = gender
-    if category_type:
-        size_block["category_type"] = category_type
-
-    if model_size:
-        size_block["model_size"] = model_size
-    if model_metrics:
-        size_block["model_metrics"] = model_metrics
-
-    # ключевое: реальные замеры + примерка
-    if isinstance(real_measurements, dict) and real_measurements:
-        size_block["real_measurements"] = real_measurements
-    if isinstance(try_on, dict) and try_on:
-        size_block["try_on"] = try_on
-
-    metrics_all[size_label] = size_block
-    g.metrics = metrics_all
-
-    db.add(g)
-    db.commit()
-    db.refresh(g)
-
-    invalidate_items_cache()
-    return {"ok": True, "action": "updated" if existing else "created", "sku": sku, "id": g.id, "size": size_label}
-
-
-@app.get("/api/admin/builder/list")
-def admin_builder_list(limit: int = 50, db: Session = Depends(database.get_db)):
-    lim = max(1, min(int(limit or 50), 200))
-    items = db.query(models.Garment).order_by(models.Garment.id.desc()).limit(lim).all()
-    return {"items": items}
-
-
-@app.get("/api/admin/builder/analysis")
-def admin_builder_analysis(db: Session = Depends(database.get_db)):
-    """
-    Простая аналитика по введённым примеркам:
-    считает сколько size-блоков имеют try_on, и сколько отмечено ideal_for_me=true
-    """
-    garments = db.query(models.Garment).all()
-
-    total_tryons = 0
-    total_ideal = 0
-    by_category: Dict[str, Dict[str, int]] = {}
-
-    for g in garments:
-        if not g.metrics:
-            continue
-        for size_label, block in (g.metrics or {}).items():
-            if not isinstance(block, dict):
-                continue
-            try_on = block.get("try_on")
-            if not isinstance(try_on, dict) or not try_on:
-                continue
-
-            total_tryons += 1
-            ideal = bool(try_on.get("ideal_for_me"))
-            if ideal:
-                total_ideal += 1
-
-            cat = (block.get("internal_category") or block.get("category_type") or "unknown").strip() or "unknown"
-            by_category.setdefault(cat, {"tryons": 0, "ideal": 0})
-            by_category[cat]["tryons"] += 1
-            if ideal:
-                by_category[cat]["ideal"] += 1
-
-    return {
-        "tryons_total": total_tryons,
-        "ideal_total": total_ideal,
-        "by_category": by_category,
-    }
-
-
-# -----------------------------
-# ADMIN: helpers
+# ADMIN: STATS / TABLES
 # -----------------------------
 @app.get("/api/admin/stats")
 def admin_stats(db: Session = Depends(database.get_db)):
@@ -554,8 +414,11 @@ def admin_stats(db: Session = Depends(database.get_db)):
 
     db_path = getattr(database, "DB_PATH", None)
     db_size = None
-    if db_path and os.path.exists(db_path):
-        db_size = os.path.getsize(db_path)
+    try:
+        if db_path and os.path.exists(db_path):
+            db_size = os.path.getsize(db_path)
+    except Exception:
+        db_size = None
 
     return {
         "counts": {"garments": garments, "profiles": profiles, "feedback": feedback, "priors": priors},
@@ -567,7 +430,7 @@ def admin_stats(db: Session = Depends(database.get_db)):
 def admin_tables(db: Session = Depends(database.get_db)):
     engine = db.get_bind()
     insp = inspect(engine)
-    names = [n for n in insp.get_table_names()]
+    names = insp.get_table_names()
     out = []
     for name in names:
         try:
@@ -575,7 +438,7 @@ def admin_tables(db: Session = Depends(database.get_db)):
             out.append({"name": name, "rows": int(cnt or 0)})
         except Exception:
             out.append({"name": name, "rows": None})
-    out.sort(key=lambda x: (x["name"] or ""))
+    out.sort(key=lambda x: x["name"])
     return {"tables": out}
 
 
@@ -586,33 +449,134 @@ def admin_table_preview(table_name: str, limit: int = 50, db: Session = Depends(
     allowed = set(insp.get_table_names())
     if table_name not in allowed:
         raise HTTPException(status_code=404, detail="Unknown table")
+
     lim = max(1, min(int(limit or 50), 200))
     rows = db.execute(text(f"SELECT * FROM {table_name} LIMIT :lim"), {"lim": lim}).mappings().all()
     return {"rows": [dict(r) for r in rows]}
 
 
-@app.get("/api/admin/garments")
-def admin_garments(search: str = "", limit: int = 50, db: Session = Depends(database.get_db)):
-    lim = max(1, min(int(limit or 50), 200))
-    q = db.query(models.Garment)
-    if search:
-        s = f"%{search.strip()}%"
-        q = q.filter(
-            (models.Garment.sku.ilike(s)) | (models.Garment.name.ilike(s)) | (models.Garment.platform.ilike(s))
-        )
-    items = q.order_by(models.Garment.id.desc()).limit(lim).all()
-    return {"items": items}
-
-
 @app.get("/api/admin/feedback")
 def admin_feedback(limit: int = 100, db: Session = Depends(database.get_db)):
     lim = max(1, min(int(limit or 100), 500))
-    q = db.query(models.Feedback).order_by(models.Feedback.id.desc()).limit(lim).all()
-    return {"items": q}
+    items = db.query(models.Feedback).order_by(models.Feedback.id.desc()).limit(lim).all()
+    return {"items": [feedback_to_dict(f) for f in items]}
 
 
 # -----------------------------
-# FRONTEND (static + pages)
+# ADMIN: GARMENTS LIST (FOR ADMIN.JS)
+# -----------------------------
+@app.get("/api/admin/garments")
+def admin_garments(
+    search: str = Query("", description="search by sku or name"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(database.get_db),
+):
+    q = (search or "").strip()
+    query = db.query(models.Garment)
+
+    if q:
+        # ilike может не работать в sqlite с кириллицей идеально, но для sku/латиницы ок
+        like = f"%{q}%"
+        query = query.filter(or_(models.Garment.sku.ilike(like), models.Garment.name.ilike(like)))
+
+    items = query.order_by(models.Garment.id.desc()).limit(int(limit)).all()
+    return {"items": [garment_to_dict(g) for g in items]}
+
+
+# -----------------------------
+# ADMIN: BUILDER API (GET/UPSERT/LIST/DELETE)
+# -----------------------------
+@app.get("/api/admin/builder/get")
+def builder_get(sku: str = Query(...), db: Session = Depends(database.get_db)):
+    s = (sku or "").strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="sku required")
+    g = db.query(models.Garment).filter(models.Garment.sku == s).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="not found")
+    return garment_to_dict(g)
+
+
+@app.get("/api/admin/builder/list")
+def builder_list(limit: int = Query(20, ge=1, le=200), db: Session = Depends(database.get_db)):
+    items = db.query(models.Garment).order_by(models.Garment.id.desc()).limit(int(limit)).all()
+    return {"items": [garment_to_dict(g) for g in items]}
+
+
+@app.post("/api/admin/builder/upsert")
+def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(database.get_db)):
+    sku = (payload.get("sku") or "").strip()
+    if not sku:
+        raise HTTPException(status_code=400, detail="sku is required")
+
+    g = db.query(models.Garment).filter(models.Garment.sku == sku).first()
+    created = False
+    if not g:
+        g = models.Garment(sku=sku)
+        created = True
+
+    # базовые поля
+    g.name = (payload.get("name") or g.name or sku).strip()
+    g.platform = (payload.get("platform") or g.platform or "manual").strip()
+
+    img = (payload.get("image_url") or "").strip()
+    if img:
+        g.image_url = img
+
+    pr = _coerce_float(payload.get("price"))
+    if pr is not None:
+        g.price = float(pr)
+
+    g.in_stock = bool(payload.get("in_stock", True))
+
+    # размерный блок в metrics
+    size_label = (payload.get("size_label") or "M").strip().upper()
+    allm = dict(g.metrics or {})
+    allm.setdefault(size_label, {})
+    block = dict(allm.get(size_label) or {})
+
+    rm = payload.get("real_measurements")
+    if isinstance(rm, dict):
+        block["real_measurements"] = rm
+
+    tr = payload.get("try_on")
+    if isinstance(tr, dict):
+        block["try_on"] = tr
+
+    # дополнительные полезные поля — не ломают твою логику
+    for key in ["fit_profile", "fabric", "elastane_pct", "model_metrics", "model_size", "internal_category"]:
+        if payload.get(key) is not None:
+            block[key] = payload.get(key)
+
+    allm[size_label] = block
+    g.metrics = allm
+
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    invalidate_items_cache()
+
+    return {"ok": True, "action": "created" if created else "updated", "sku": sku, "id": g.id, "size": size_label}
+
+
+@app.delete("/api/admin/builder/delete")
+def builder_delete(sku: str = Query(...), db: Session = Depends(database.get_db)):
+    s = (sku or "").strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="sku required")
+
+    g = db.query(models.Garment).filter(models.Garment.sku == s).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="not found")
+
+    db.delete(g)
+    db.commit()
+    invalidate_items_cache()
+    return {"ok": True, "deleted": s}
+
+
+# -----------------------------
+# FRONTEND STATIC + ROUTES
 # -----------------------------
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
@@ -646,7 +610,6 @@ def serve_admin_js():
     raise HTTPException(status_code=404, detail="Frontend admin.js not found")
 
 
-# Ручной сборщик (если файлы добавлены)
 @app.get("/builder", include_in_schema=False)
 def serve_builder():
     if BUILDER_FILE.exists():

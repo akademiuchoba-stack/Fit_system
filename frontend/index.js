@@ -53,7 +53,6 @@
         btnCabinet: qs('#btn-cabinet'),
 
         btnBack: qs('#btn-back'),
-        // btnRunParser перенесён в отдельный Admin UI (/admin)
         btnAdmin: qs('#btn-admin'),
 
         profiles: qs('#profiles'),
@@ -100,9 +99,8 @@
       if(this.el.btnOpenCabinet) this.el.btnOpenCabinet.addEventListener('click', ()=> this.showCabinet());
       if(this.el.btnBack) this.el.btnBack.addEventListener('click', ()=> this.showMain());
       if(this.el.btnRefresh) this.el.btnRefresh.addEventListener('click', ()=> this.refreshAll());
-      // обновление базы переехало в Admin UI (/admin)
 
-      // ✅ FIX: separate Admin page
+      // Admin отдельной страницей
       if(this.el.btnAdmin) this.el.btnAdmin.addEventListener('click', ()=> { window.location.href = '/admin'; });
 
       if(this.el.btnAdminClose) this.el.btnAdminClose.addEventListener('click', ()=> this.toggleAdmin(false));
@@ -182,7 +180,6 @@
     async loadProfiles(){
       const list = await api(API.profiles);
       this.state.profiles = Array.isArray(list) ? list : [];
-      // choose active
       const exists = this.state.activeProfileId && this.state.profiles.some(p=>p.id===this.state.activeProfileId);
       if(!exists){
         this.state.activeProfileId = this.state.profiles[0]?.id || null;
@@ -236,6 +233,8 @@
           if(act==='activate'){
             this.setActiveProfile(p.id);
             this.toast(`Активен: ${p.name}`);
+            // ✅ сразу обновляем ленту
+            this.refreshResults().catch(()=>{});
           } else if(act==='edit'){
             this.loadProfileIntoForm(p);
           } else if(act==='delete'){
@@ -262,7 +261,6 @@
       f.arm_length.value = p.arm_length ?? '';
       f.leg_length.value = p.leg_length ?? '';
       f.id.value = p.id ?? '';
-
       show(this.el.btnCancelEdit);
     }
 
@@ -321,7 +319,14 @@
         this.renderCards();
         return;
       }
-      const data = await api(API.calculate(30));
+
+      // ✅ FIX: calculate — это POST и нужен profile_id
+      const payload = { profile_id: this.state.activeProfileId };
+      const data = await api(API.calculate(30), {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+
       this.state.results = Array.isArray(data) ? data : [];
       this.renderCards();
     }
@@ -340,22 +345,35 @@
       for(const r of list){
         const card = document.createElement('div');
         card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition cursor-pointer';
+
         const img = r?.image_url || PLACEHOLDER_IMG;
         const score = Number(r?.score ?? 0);
         const scoreTxt = Number.isFinite(score) ? Math.round(score) : 0;
+        const sku = r?.sku || '';
+        const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
 
         card.innerHTML = `
           <div class="aspect-[4/5] bg-gray-50 overflow-hidden">
             <img src="${esc(img)}" onerror="this.src='${PLACEHOLDER_IMG}'" class="w-full h-full object-cover"/>
           </div>
+
           <div class="p-4">
             <div class="font-black truncate">${esc(r?.name || r?.sku || '—')}</div>
-            <div class="text-xs text-gray-500 mt-1">${esc(r?.platform || '')} • SKU ${esc(r?.sku || '')}</div>
+            <div class="text-xs text-gray-500 mt-1">${esc(r?.platform || '')} • SKU ${esc(sku)}</div>
+
             <div class="mt-3 flex items-center justify-between">
               <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Score</div>
               <div class="text-lg font-black">${esc(scoreTxt)}</div>
             </div>
+
             <div class="mt-2 text-sm text-gray-700 line-clamp-2">${esc(r?.explain || '')}</div>
+
+            <div class="mt-3 flex items-center justify-between gap-2">
+              <div class="text-xs text-gray-500">size: <span class="font-black">${esc(r?.best_size || '—')}</span></div>
+              <a href="${builderUrl}"
+                 class="text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 font-extrabold uppercase tracking-widest"
+                 onclick="event.stopPropagation();">✎ Builder</a>
+            </div>
           </div>
         `;
 
@@ -366,19 +384,36 @@
 
     openModal(r){
       this.state.currentCard = r;
+
+      const sku = r?.sku || '';
+      const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
+
       if(this.el.modalTitle) this.el.modalTitle.textContent = r?.name || r?.sku || '—';
-      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${r?.sku || ''} • size ${r?.best_size || '—'}`;
+      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${sku} • size ${r?.best_size || '—'}`;
       if(this.el.modalImage) this.el.modalImage.src = r?.image_url || PLACEHOLDER_IMG;
 
       if(this.el.modalScore) this.el.modalScore.textContent = String(Math.round(Number(r?.score ?? 0)));
-      if(this.el.modalExplain) this.el.modalExplain.textContent = r?.explain || '—';
+      if(this.el.modalExplain) {
+        // добавим ссылку на Builder прямо в explain блок (не ломая верстку)
+        this.el.modalExplain.innerHTML = `
+          <div>${esc(r?.explain || '—')}</div>
+          <div class="mt-3">
+            <a href="${builderUrl}" class="inline-block px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
+              ✎ Редактировать в Builder
+            </a>
+          </div>
+        `;
+      }
 
-      // metrics
       const m = r?.metrics || {};
-      const rows = Object.entries(m).map(([k,v])=> `<div class="flex items-center justify-between gap-3 border-b border-gray-100 py-1"><div class="text-xs text-gray-500">${esc(k)}</div><div class="text-xs font-black">${esc(typeof v==='number'?fmt(v):JSON.stringify(v))}</div></div>`).join('');
+      const rows = Object.entries(m).map(([k,v])=> `
+        <div class="flex items-center justify-between gap-3 border-b border-gray-100 py-1">
+          <div class="text-xs text-gray-500">${esc(k)}</div>
+          <div class="text-xs font-black">${esc(typeof v==='number'?fmt(v):JSON.stringify(v))}</div>
+        </div>
+      `).join('');
       if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = rows || `<div class="text-sm text-gray-500">Нет данных</div>`;
 
-      // reset real
       if(this.el.realChest) this.el.realChest.value = '';
       if(this.el.realShoulders) this.el.realShoulders.value = '';
       if(this.el.realSleeve) this.el.realSleeve.value = '';

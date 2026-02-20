@@ -1,31 +1,115 @@
 <!doctype html>
-<html>
+<html lang="ru">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.tailwindcss.com"></script>
+  <title>Fit System — Ручной сборщик</title>
 </head>
-<body class="bg-slate-900 text-white p-6">
-  <h1 class="text-2xl mb-4">Ручной сборщик</h1>
+<body class="bg-slate-950 text-slate-100">
 
-  <input id="sku" placeholder="SKU" class="block mb-2 p-2 text-black">
-  <input id="name" placeholder="Название" class="block mb-2 p-2 text-black">
-  <input id="price" placeholder="Цена" class="block mb-2 p-2 text-black">
-  <input id="model_size" placeholder="Размер модели" class="block mb-2 p-2 text-black">
-  <input id="fit_profile" placeholder="fit_profile (regular/slim/oversize)" class="block mb-2 p-2 text-black">
+<div class="max-w-4xl mx-auto p-4 space-y-6">
 
-  <textarea id="text" placeholder="Вставь описание..." class="block mb-2 p-2 text-black w-full h-32"></textarea>
+  <div class="flex justify-between items-center">
+    <h1 class="text-2xl font-bold">Ручной сборщик товара</h1>
+    <a href="/admin" class="text-sky-400 text-sm">← назад</a>
+  </div>
 
-  <h2 class="mt-4">Реальные замеры</h2>
-  <input id="chest_g" placeholder="Chest garment" class="block mb-2 p-2 text-black">
-  <input id="waist_g" placeholder="Waist garment" class="block mb-2 p-2 text-black">
-  <input id="hips_g" placeholder="Hips garment" class="block mb-2 p-2 text-black">
+  <!-- ОСНОВНЫЕ ДАННЫЕ -->
+  <div class="bg-slate-900 p-4 rounded-xl space-y-3">
+    <h2 class="font-semibold">Основные данные</h2>
 
-  <h2 class="mt-4">Примерка</h2>
-  <input id="fit_score" placeholder="fit_score_real (-2..2)" class="block mb-2 p-2 text-black">
-  <input id="notes" placeholder="Комментарий" class="block mb-2 p-2 text-black">
+    <input id="sku" placeholder="SKU / Артикул (обязательно)" class="w-full p-2 rounded bg-slate-800">
+    <input id="name" placeholder="Название" class="w-full p-2 rounded bg-slate-800">
+    <input id="price" placeholder="Цена" type="number" class="w-full p-2 rounded bg-slate-800">
+    <input id="image_url" placeholder="URL главного фото" class="w-full p-2 rounded bg-slate-800">
 
-  <button onclick="save()" class="bg-green-500 px-4 py-2 mt-4">Сохранить</button>
+    <div class="grid grid-cols-2 gap-2">
+      <input id="size_label" placeholder="Размер (S/M/L)" class="p-2 rounded bg-slate-800">
+      <input id="model_size" placeholder="Размер на модели" class="p-2 rounded bg-slate-800">
+    </div>
 
-  <script src="/builder.js"></script>
+    <div class="grid grid-cols-2 gap-2">
+      <select id="fit_profile" class="p-2 rounded bg-slate-800">
+        <option value="regular">regular</option>
+        <option value="slim">slim</option>
+        <option value="oversize">oversize</option>
+      </select>
+
+      <input id="fabric" placeholder="Ткань" class="p-2 rounded bg-slate-800">
+    </div>
+
+    <input id="elastane_pct" placeholder="% эластана" type="number" class="w-full p-2 rounded bg-slate-800">
+
+    <textarea id="description" placeholder="Вставь текст из Lamoda / O'stin (если нужно распарсить параметры модели)"
+              class="w-full p-2 rounded bg-slate-800 h-28"></textarea>
+  </div>
+
+  <!-- МОДЕЛЬНЫЕ ПАРАМЕТРЫ -->
+  <div class="bg-slate-900 p-4 rounded-xl space-y-3">
+    <h2 class="font-semibold">Параметры модели (если есть)</h2>
+
+    <div class="grid grid-cols-3 gap-2">
+      <input id="model_chest" placeholder="Грудь модели" type="number" class="p-2 rounded bg-slate-800">
+      <input id="model_waist" placeholder="Талия модели" type="number" class="p-2 rounded bg-slate-800">
+      <input id="model_hips" placeholder="Бёдра модели" type="number" class="p-2 rounded bg-slate-800">
+    </div>
+
+    <input id="model_height" placeholder="Рост модели" type="number" class="w-full p-2 rounded bg-slate-800">
+  </div>
+
+  <!-- РЕАЛЬНЫЕ ЗАМЕРЫ -->
+  <div class="bg-slate-900 p-4 rounded-xl space-y-3">
+    <h2 class="font-semibold">Реальные замеры вещи (в магазине)</h2>
+
+    <div class="grid grid-cols-3 gap-2">
+      <input id="g_chest" placeholder="Грудь изделия" type="number" class="p-2 rounded bg-slate-800">
+      <input id="g_waist" placeholder="Талия изделия" type="number" class="p-2 rounded bg-slate-800">
+      <input id="g_hips" placeholder="Бёдра изделия" type="number" class="p-2 rounded bg-slate-800">
+    </div>
+
+    <div class="grid grid-cols-2 gap-2">
+      <input id="g_length" placeholder="Длина изделия" type="number" class="p-2 rounded bg-slate-800">
+      <input id="g_sleeve" placeholder="Длина рукава" type="number" class="p-2 rounded bg-slate-800">
+    </div>
+  </div>
+
+  <!-- ПРИМЕРКА -->
+  <div class="bg-slate-900 p-4 rounded-xl space-y-3">
+    <h2 class="font-semibold">Примерка</h2>
+
+    <select id="fit_score" class="w-full p-2 rounded bg-slate-800">
+      <option value="">Оценка посадки</option>
+      <option value="-2">-2 сильно мало</option>
+      <option value="-1">-1 мало</option>
+      <option value="0">0 идеально</option>
+      <option value="1">1 свободно</option>
+      <option value="2">2 сильно свободно</option>
+    </select>
+
+    <label class="flex items-center gap-2">
+      <input id="ideal" type="checkbox">
+      Идеально для меня
+    </label>
+
+    <textarea id="notes" placeholder="Комментарий по посадке"
+              class="w-full p-2 rounded bg-slate-800 h-20"></textarea>
+  </div>
+
+  <button onclick="saveItem()"
+          class="w-full bg-green-500 text-black font-semibold p-3 rounded-xl">
+    Сохранить товар
+  </button>
+
+  <!-- СПИСОК -->
+  <div class="bg-slate-900 p-4 rounded-xl space-y-2">
+    <h2 class="font-semibold">Последние товары</h2>
+    <div id="items"></div>
+  </div>
+
+</div>
+
+<script src="/builder.js"></script>
 </body>
 </html>
+

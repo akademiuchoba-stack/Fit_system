@@ -3,11 +3,10 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Fit</title>
+  <title>Fit_system</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900">
-  <!-- Top bar -->
   <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
       <div class="w-9 h-9 rounded-2xl bg-gray-900 text-white flex items-center justify-center font-black text-base shadow">Fit</div>
@@ -21,6 +20,9 @@
         <button id="btn-refresh" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">
           Обновить
         </button>
+        <a href="/builder" class="px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-100 transition">
+          Builder
+        </a>
         <button id="btn-cabinet" class="px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">
           Кабинет
         </button>
@@ -28,28 +30,26 @@
     </div>
   </header>
 
-  <!-- Main: cards only -->
   <main class="max-w-6xl mx-auto px-4 py-5 pb-10">
-    <div id="toast" class="hidden mb-4 p-3 rounded-2xl bg-gray-900 text-white text-sm"></div>
+    <div id="toast" class="hidden mb-4 p-3 rounded-2xl bg-gray-900 text-white text-sm shadow-lg"></div>
 
     <section id="main-view">
       <div id="cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
 
       <div id="empty-state" class="hidden mt-10 text-center">
-        <div class="text-sm text-gray-600">Нет активного профиля или товаров.</div>
+        <div class="text-sm text-gray-600">Нет активного профиля или подходящих товаров.</div>
         <button id="btn-open-cabinet" class="mt-4 px-4 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest">
           Открыть кабинет
         </button>
       </div>
     </section>
 
-    <!-- Cabinet -->
     <section id="cabinet-view" class="hidden">
       <div class="flex items-center justify-between gap-3 mt-1">
         <h1 class="text-lg font-black">Кабинет</h1>
         <div class="flex items-center gap-2">
           <button id="btn-admin" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">
-            Админ
+            Админка
           </button>
           <button id="btn-back" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
             Назад
@@ -58,7 +58,6 @@
       </div>
 
       <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <!-- Profiles list -->
         <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
           <div class="flex items-center justify-between gap-3">
             <div class="font-black">Профили</div>
@@ -67,7 +66,6 @@
           <div id="profiles-empty" class="hidden mt-3 text-sm text-gray-500">Профилей пока нет. Добавь новый справа.</div>
         </div>
 
-        <!-- Profile form -->
         <div class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
           <div class="flex items-center justify-between gap-3">
             <div id="form-title" class="font-black">Новый профиль</div>
@@ -86,8 +84,8 @@
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Пол</div>
                 <select name="gender" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200">
-                  <option value="male">male</option>
-                  <option value="female">female</option>
+                  <option value="male">Мужской</option>
+                  <option value="female">Женский</option>
                 </select>
               </label>
             </div>
@@ -95,34 +93,34 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Рост</div>
-                <input type="number" inputmode="numeric" min="0" name="height" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="175"/>
+                <input type="number" step="0.1" inputmode="decimal" name="height" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="175"/>
               </label>
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Грудь</div>
-                <input type="number" inputmode="numeric" min="0" name="chest" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="100"/>
+                <input type="number" step="0.1" inputmode="decimal" name="chest" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="100"/>
               </label>
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Плечи</div>
-                <input type="number" inputmode="numeric" min="0" name="shoulders" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="46"/>
+                <input type="number" step="0.1" inputmode="decimal" name="shoulders" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="46"/>
               </label>
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Талия</div>
-                <input type="number" inputmode="numeric" min="0" name="waist" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="85"/>
+                <input type="number" step="0.1" inputmode="decimal" name="waist" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="85"/>
               </label>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Бёдра</div>
-                <input type="number" inputmode="numeric" min="0" name="hips" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="98"/>
+                <input type="number" step="0.1" inputmode="decimal" name="hips" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="98"/>
               </label>
               <label class="block">
                 <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Рука</div>
-                <input type="number" inputmode="numeric" min="0" name="arm_length" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="62"/>
+                <input type="number" step="0.1" inputmode="decimal" name="arm_length" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="62"/>
               </label>
               <label class="block">
-                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Нога</div>
-                <input type="number" inputmode="numeric" min="0" name="leg_length" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="102"/>
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-1">Нога (внешн.)</div>
+                <input type="number" step="0.1" inputmode="decimal" name="leg_length" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="102"/>
               </label>
             </div>
 
@@ -139,59 +137,37 @@
           </form>
         </div>
       </div>
-
-      <!-- Admin panel -->
-      <div id="admin-panel" class="hidden mt-4 bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
-        <div class="flex items-center justify-between gap-3">
-          <div class="font-black">Admin</div>
-          <button id="btn-admin-close" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">Скрыть</button>
-        </div>
-        <div id="admin-stats" class="mt-3 text-sm text-gray-700"></div>
-      </div>
     </section>
   </main>
 
-  <!-- Modal -->
-  <div id="modal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 hidden">
+  <div id="modal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 hidden">
     <div class="w-full h-full md:flex md:items-center md:justify-center p-0 md:p-4">
       <div class="bg-white w-full h-full md:h-auto md:max-w-4xl md:rounded-[2rem] overflow-hidden md:max-h-[95vh] overflow-y-auto shadow-2xl">
         <div class="p-5 sm:p-7 md:p-10">
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex items-start justify-between gap-3 border-b border-gray-100 pb-4 mb-4">
             <div class="min-w-0">
-              <div id="modal-title" class="font-black text-lg truncate">—</div>
+              <div id="modal-title" class="font-black text-2xl truncate">—</div>
               <div id="modal-subtitle" class="text-sm text-gray-500 mt-1">—</div>
             </div>
-            <button id="btn-close-modal" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">Закрыть</button>
+            <button id="btn-close-modal" class="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest transition">Закрыть</button>
           </div>
 
-          <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div class="rounded-3xl border border-gray-100 overflow-hidden bg-gray-50">
-              <img id="modal-image" alt="" class="w-full h-full object-cover min-h-[260px]" />
+          <div class="mt-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="rounded-3xl border border-gray-100 overflow-hidden bg-gray-50 shadow-sm">
+              <img id="modal-image" alt="" class="w-full h-full object-cover min-h-[300px]" />
             </div>
-            <div class="space-y-3">
-              <div class="p-4 rounded-3xl border border-gray-100 bg-white">
-                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Оценка</div>
-                <div id="modal-score" class="mt-1 text-2xl font-black">—</div>
-                <div id="modal-explain" class="mt-2 text-sm text-gray-700">—</div>
-              </div>
-
-              <div class="p-4 rounded-3xl border border-gray-100 bg-white">
-                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Замеры из базы</div>
-                <div id="modal-metrics" class="mt-2 text-sm text-gray-800"></div>
-              </div>
-
-              <div class="p-4 rounded-3xl border border-gray-100 bg-white">
-                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Реальные замеры (магазин)</div>
-                <div class="grid grid-cols-2 gap-2 mt-2">
-                  <input id="real-chest" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Грудь"/>
-                  <input id="real-shoulders" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Плечи"/>
-                  <input id="real-sleeve" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Рукав"/>
-                  <input id="real-length" type="number" inputmode="numeric" min="0" class="px-3 py-2 rounded-2xl border border-gray-200 bg-gray-50" placeholder="Длина"/>
+            <div class="space-y-4">
+              <div class="p-5 rounded-3xl border border-gray-100 bg-white shadow-sm">
+                <div class="flex justify-between items-center mb-2">
+                    <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Совпадение</div>
+                    <div id="modal-score" class="text-3xl font-black text-indigo-600">—</div>
                 </div>
-                <button id="btn-save-real" class="mt-3 w-full px-4 py-3 rounded-2xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-indigo-600 transition">
-                  Сохранить замеры / feedback
-                </button>
-                <div id="real-save-note" class="mt-2 text-xs text-gray-500"></div>
+                <div id="modal-explain" class="mt-3 text-sm text-gray-700 space-y-2 leading-relaxed">—</div>
+              </div>
+
+              <div class="p-5 rounded-3xl border border-gray-100 bg-white shadow-sm">
+                <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-3">Замеры из базы</div>
+                <div id="modal-metrics" class="space-y-1"></div>
               </div>
             </div>
           </div>
@@ -204,5 +180,3 @@
   <script src="/index.js"></script>
 </body>
 </html>
-
-

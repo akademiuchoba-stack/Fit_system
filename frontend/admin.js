@@ -4,14 +4,12 @@
     updateDb: '/api/admin/update-db',
     garments: (q='', limit=50) => `/api/admin/garments?search=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}`,
     profiles: '/api/profiles',
-    feedback: '/api/admin/feedback?limit=100',
-    tables: '/api/admin/tables',
-    table: (name, limit=50) => `/api/admin/table/${encodeURIComponent(name)}?limit=${encodeURIComponent(limit)}`,
     builderDelete: (sku) => `/api/admin/builder/delete?sku=${encodeURIComponent(sku)}`,
   };
 
   const qs = (s, r=document) => r.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  
   function show(el){ if(el) el.classList.remove('hidden'); }
   function hide(el){ if(el) el.classList.add('hidden'); }
 
@@ -37,10 +35,10 @@
   async function updateDb(){
     const btn = qs('#btn-update-db');
     if(btn) btn.disabled = true;
-    toast('Запускаю парсер и жду завершения...');
+    toast('Очищаю кэш сервера...');
     try{
       const r = await api(API.updateDb, {method:'POST'});
-      toast(`Готово. Товаров в БД: ${r?.garments_total ?? '—'}`);
+      toast(`Кэш очищен. Всего товаров в БД: ${r?.garments_total ?? '—'}`);
       await refreshAll();
     } finally {
       if(btn) btn.disabled = false;
@@ -73,7 +71,6 @@
       return;
     }
 
-    // Ожидаемые поля у товара (Garment): sku, name, platform, price, in_stock, image_url, id
     container.innerHTML = `
       <table class="min-w-full text-sm">
         <thead class="bg-gray-50 text-gray-600">
@@ -93,7 +90,6 @@
             const platform = it?.platform || '';
             const price = (it?.price ?? '');
             const inStock = !!it?.in_stock;
-
             const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
 
             return `
@@ -104,12 +100,10 @@
                 <td class="px-3 py-2 align-top whitespace-nowrap">${esc(price)}</td>
                 <td class="px-3 py-2 align-top whitespace-nowrap">${inStock ? '✅' : '—'}</td>
                 <td class="px-3 py-2 align-top whitespace-nowrap">
-                  <a href="${builderUrl}"
-                     class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
+                  <a href="${builderUrl}" class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
                     ✎ Builder
                   </a>
-                  <button data-del="${esc(sku)}"
-                          class="ml-2 inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest">
+                  <button data-del="${esc(sku)}" class="ml-2 inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-rose-50 transition">
                     🗑 Удалить
                   </button>
                 </td>
@@ -120,7 +114,6 @@
       </table>
     `;
 
-    // обработчик удаления
     container.addEventListener('click', async (e) => {
       const btn = e.target.closest('button[data-del]');
       if(!btn) return;
@@ -150,11 +143,9 @@
       const items = [
         ['Товары', c.garments ?? 0],
         ['Профили', c.profiles ?? 0],
-        ['Feedback', c.feedback ?? 0],
-        ['Priors', c.priors ?? 0],
       ];
       overview.innerHTML = items.map(([k,v])=>`
-        <div class="p-4 rounded-2xl border border-gray-100 bg-gray-50">
+        <div class="p-4 rounded-2xl border border-gray-100 bg-gray-50 shadow-sm">
           <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">${esc(k)}</div>
           <div class="mt-1 text-2xl font-black">${esc(v)}</div>
         </div>
@@ -176,47 +167,8 @@
     renderTable(box, data || []);
   }
 
-  async function loadFeedback(){
-    const box = qs('#feedback');
-    if(box) box.innerHTML = `<div class="p-4 text-sm text-gray-500">Загрузка...</div>`;
-    const data = await api(API.feedback);
-    renderTable(box, data?.items || []);
-  }
-
-  async function loadTables(){
-    const grid = qs('#tables');
-    if(!grid) return;
-    grid.innerHTML = `<div class="p-4 text-sm text-gray-500">Загрузка...</div>`;
-    const data = await api(API.tables);
-    const items = data?.tables || [];
-    grid.innerHTML = items.map(t=>`
-      <button data-table="${esc(t.name)}" class="text-left p-4 rounded-2xl border border-gray-100 bg-white hover:border-indigo-200 hover:shadow-sm transition">
-        <div class="font-black truncate">${esc(t.name)}</div>
-        <div class="mt-1 text-xs text-gray-500">rows: ${esc(t.rows)}</div>
-      </button>
-    `).join('');
-
-    grid.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button[data-table]');
-      if(!btn) return;
-      const name = btn.getAttribute('data-table');
-      await openTablePreview(name);
-    }, {once:true});
-  }
-
-  async function openTablePreview(name){
-    const wrap = qs('#table-preview');
-    const title = qs('#table-title');
-    const rowsBox = qs('#table-rows');
-    if(title) title.textContent = name;
-    show(wrap);
-    if(rowsBox) rowsBox.innerHTML = `<div class="p-4 text-sm text-gray-500">Загрузка...</div>`;
-    const data = await api(API.table(name, 50));
-    renderTable(rowsBox, data?.rows || []);
-  }
-
   async function refreshAll(){
-    await Promise.allSettled([loadOverview(), loadProfiles(), loadFeedback(), loadTables()]);
+    await Promise.allSettled([loadOverview(), loadProfiles()]);
     await loadGarments(qs('#garment-search')?.value || '');
   }
 
@@ -229,7 +181,6 @@
       loadGarments(qs('#garment-search')?.value || '').catch(err=>toast(err.message));
     }
   });
-  qs('#btn-close-preview')?.addEventListener('click', ()=> hide(qs('#table-preview')));
 
   refreshAll().catch(e=>toast(e.message));
 })();

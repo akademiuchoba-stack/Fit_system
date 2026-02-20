@@ -3,14 +3,10 @@
 
   const API = {
     profiles: '/api/profiles',
-    calculate: (limit=20) => `/api/calculate?limit=${encodeURIComponent(limit)}`,
-    updateDb: '/api/admin/update-db',
-    adminStats: '/api/admin/stats',
-    feedback: '/api/feedback'
+    calculate: (limit=50) => `/api/calculate?limit=${encodeURIComponent(limit)}`
   };
 
   const qs = (sel, root=document) => root.querySelector(sel);
-  const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 
   function show(el){ if(el) el.classList.remove('hidden'); }
   function hide(el){ if(el) el.classList.add('hidden'); }
@@ -51,7 +47,6 @@
 
         btnRefresh: qs('#btn-refresh'),
         btnCabinet: qs('#btn-cabinet'),
-
         btnBack: qs('#btn-back'),
         btnAdmin: qs('#btn-admin'),
 
@@ -63,10 +58,6 @@
         btnClearForm: qs('#btn-clear-form'),
         btnCancelEdit: qs('#btn-cancel-edit'),
 
-        adminPanel: qs('#admin-panel'),
-        btnAdminClose: qs('#btn-admin-close'),
-        adminStats: qs('#admin-stats'),
-
         modal: qs('#modal'),
         btnCloseModal: qs('#btn-close-modal'),
         modalTitle: qs('#modal-title'),
@@ -75,12 +66,6 @@
         modalScore: qs('#modal-score'),
         modalExplain: qs('#modal-explain'),
         modalMetrics: qs('#modal-metrics'),
-        realChest: qs('#real-chest'),
-        realShoulders: qs('#real-shoulders'),
-        realSleeve: qs('#real-sleeve'),
-        realLength: qs('#real-length'),
-        btnSaveReal: qs('#btn-save-real'),
-        realSaveNote: qs('#real-save-note'),
       };
 
       this.bind();
@@ -98,12 +83,10 @@
       if(this.el.btnCabinet) this.el.btnCabinet.addEventListener('click', ()=> this.showCabinet());
       if(this.el.btnOpenCabinet) this.el.btnOpenCabinet.addEventListener('click', ()=> this.showCabinet());
       if(this.el.btnBack) this.el.btnBack.addEventListener('click', ()=> this.showMain());
-      if(this.el.btnRefresh) this.el.btnRefresh.addEventListener('click', ()=> this.refreshAll());
+      if(this.el.btnRefresh) this.el.btnRefresh.addEventListener('click', ()=> this.refreshResults());
 
-      // Admin отдельной страницей
       if(this.el.btnAdmin) this.el.btnAdmin.addEventListener('click', ()=> { window.location.href = '/admin'; });
 
-      if(this.el.btnAdminClose) this.el.btnAdminClose.addEventListener('click', ()=> this.toggleAdmin(false));
       if(this.el.btnCloseModal) this.el.btnCloseModal.addEventListener('click', ()=> this.closeModal());
       if(this.el.modal) this.el.modal.addEventListener('click', (e)=> { if(e.target === this.el.modal) this.closeModal(); });
 
@@ -114,12 +97,6 @@
         this.el.form.addEventListener('submit', (e)=> {
           e.preventDefault();
           this.saveProfileFromForm().catch(err=> this.toast(err.message));
-        });
-      }
-
-      if(this.el.btnSaveReal){
-        this.el.btnSaveReal.addEventListener('click', ()=> {
-          this.saveRealMeasurements().catch(err=> this.toast(err.message));
         });
       }
     }
@@ -138,36 +115,7 @@
 
     showMain(){
       hide(this.el.cabinetView);
-      hide(this.el.adminPanel);
       show(this.el.mainView);
-    }
-
-    toggleAdmin(on){
-      if(!this.el.adminPanel) return;
-      if(on){
-        show(this.el.adminPanel);
-        this.refreshAdmin().catch(err=> this.toast(err.message));
-      } else {
-        hide(this.el.adminPanel);
-      }
-    }
-
-    async refreshAdmin(){
-      if(!this.el.adminStats) return;
-      this.el.adminStats.textContent = 'Загрузка...';
-      const data = await api(API.adminStats);
-      const c = data?.counts || {};
-      const db = data?.db || {};
-      const parts = [
-        `Товары: ${c.garments ?? 0}`,
-        `Профили: ${c.profiles ?? 0}`,
-        `Feedback: ${c.feedback ?? 0}`,
-        `Priors: ${c.priors ?? 0}`,
-        db.path ? `DB: ${db.path}` : null,
-        Number.isFinite(db.size_bytes) ? `DB size: ${Math.round(db.size_bytes/1024)} KB` : null,
-      ].filter(Boolean);
-
-      this.el.adminStats.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${parts.map(p=>`<div class="p-3 rounded-2xl border border-gray-100 bg-gray-50">${esc(p)}</div>`).join('')}</div>`;
     }
 
     setActiveProfile(id){
@@ -202,43 +150,49 @@
         const isActive = p.id === this.state.activeProfileId;
 
         const row = document.createElement('div');
-        row.className = `p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition`;
+        row.className = `p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition cursor-pointer`;
 
         row.innerHTML = `
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <div class="font-black truncate">${esc(p.name)}</div>
-                ${isActive ? `<span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 rounded-full bg-gray-900 text-white">active</span>` : ''}
+                ${isActive ? `<span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-600 text-white">активен</span>` : ''}
               </div>
               <div class="text-xs text-gray-600 mt-1">
-                H ${fmt(p.height)} • C ${fmt(p.chest)} • S ${fmt(p.shoulders)} • W ${fmt(p.waist)} • Hips ${fmt(p.hips)}
+                Рост ${fmt(p.height)} • Г ${fmt(p.chest)} • П ${fmt(p.shoulders)} • Т ${fmt(p.waist)} • Б ${fmt(p.hips)}
               </div>
             </div>
           </div>
 
           <div class="mt-3 flex flex-wrap gap-2">
-            <button data-act="activate" class="px-2.5 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">Активировать</button>
-            <button data-act="edit" class="px-2.5 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">Редактировать</button>
-            <button data-act="delete" class="px-2.5 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest">Удалить</button>
+            <button data-act="activate" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-800 transition">Выбрать</button>
+            <button data-act="edit" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition">Изменить</button>
+            <button data-act="delete" class="px-3 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-rose-50 transition">Удалить</button>
           </div>
         `;
 
         row.addEventListener('click', (e)=> {
           const btn = e.target?.closest('button[data-act]');
-          if(!btn) return;
+          if(!btn) {
+              // Если клик не по кнопке, просто делаем профиль активным
+              this.setActiveProfile(p.id);
+              this.refreshResults().catch(()=>{});
+              return;
+          }
           e.preventDefault();
           e.stopPropagation();
           const act = btn.getAttribute('data-act');
           if(act==='activate'){
             this.setActiveProfile(p.id);
             this.toast(`Активен: ${p.name}`);
-            // ✅ сразу обновляем ленту
             this.refreshResults().catch(()=>{});
           } else if(act==='edit'){
             this.loadProfileIntoForm(p);
           } else if(act==='delete'){
-            this.deleteProfile(p.id).catch(err=> this.toast(err.message));
+            if(confirm('Точно удалить профиль?')) {
+                this.deleteProfile(p.id).catch(err=> this.toast(err.message));
+            }
           }
         });
 
@@ -320,15 +274,17 @@
         return;
       }
 
-      // ✅ FIX: calculate — это POST и нужен profile_id
       const payload = { profile_id: this.state.activeProfileId };
-      const data = await api(API.calculate(30), {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-
-      this.state.results = Array.isArray(data) ? data : [];
-      this.renderCards();
+      try {
+        const data = await api(API.calculate(50), {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        this.state.results = Array.isArray(data) ? data : [];
+        this.renderCards();
+      } catch (e) {
+          this.toast('Ошибка загрузки рекомендаций');
+      }
     }
 
     renderCards(){
@@ -344,35 +300,39 @@
 
       for(const r of list){
         const card = document.createElement('div');
-        card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition cursor-pointer';
+        card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex flex-col';
 
         const img = r?.image_url || PLACEHOLDER_IMG;
-        const score = Number(r?.score ?? 0);
-        const scoreTxt = Number.isFinite(score) ? Math.round(score) : 0;
+        const scoreVal = Number(r?.score ?? 0);
+        const scoreTxt = Number.isFinite(scoreVal) ? Math.round(scoreVal) + '%' : '0%';
+        
+        let scoreColor = 'text-green-600 bg-green-50 border-green-200';
+        if (scoreVal < 85) scoreColor = 'text-cyan-600 bg-cyan-50 border-cyan-200';
+        if (scoreVal < 65) scoreColor = 'text-yellow-600 bg-yellow-50 border-yellow-200';
+        if (scoreVal < 45) scoreColor = 'text-red-600 bg-red-50 border-red-200';
+
         const sku = r?.sku || '';
-        const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
+
+        // Разбиваем explain на главную фразу и остальное
+        const explainParts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
+        const mainVerdict = explainParts[0] || 'Нет данных';
 
         card.innerHTML = `
-          <div class="aspect-[4/5] bg-gray-50 overflow-hidden">
+          <div class="aspect-[4/5] bg-gray-50 overflow-hidden relative">
             <img src="${esc(img)}" onerror="this.src='${PLACEHOLDER_IMG}'" class="w-full h-full object-cover"/>
+            <div class="absolute top-3 right-3 px-3 py-1.5 rounded-xl border font-black text-sm shadow-sm backdrop-blur-sm ${scoreColor}">
+                ${esc(scoreTxt)}
+            </div>
           </div>
 
-          <div class="p-4">
-            <div class="font-black truncate">${esc(r?.name || r?.sku || '—')}</div>
-            <div class="text-xs text-gray-500 mt-1">${esc(r?.platform || '')} • SKU ${esc(sku)}</div>
+          <div class="p-4 flex flex-col flex-1">
+            <div class="font-black text-lg truncate">${esc(r?.name || sku || '—')}</div>
+            <div class="text-xs text-gray-500 mt-1 uppercase tracking-widest font-extrabold">${esc(r?.platform || '')} • SKU ${esc(sku)}</div>
 
-            <div class="mt-3 flex items-center justify-between">
-              <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Score</div>
-              <div class="text-lg font-black">${esc(scoreTxt)}</div>
-            </div>
+            <div class="mt-4 text-sm font-semibold text-gray-800 flex-1">${esc(mainVerdict)}</div>
 
-            <div class="mt-2 text-sm text-gray-700 line-clamp-2">${esc(r?.explain || '')}</div>
-
-            <div class="mt-3 flex items-center justify-between gap-2">
-              <div class="text-xs text-gray-500">size: <span class="font-black">${esc(r?.best_size || '—')}</span></div>
-              <a href="${builderUrl}"
-                 class="text-xs px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 font-extrabold uppercase tracking-widest"
-                 onclick="event.stopPropagation();">✎ Builder</a>
+            <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-2">
+              <div class="text-xs text-gray-500 uppercase tracking-widest font-extrabold">Рекомендуемый размер: <span class="text-black text-sm ml-1">${esc(r?.best_size || '—')}</span></div>
             </div>
           </div>
         `;
@@ -384,41 +344,62 @@
 
     openModal(r){
       this.state.currentCard = r;
-
       const sku = r?.sku || '';
       const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
 
       if(this.el.modalTitle) this.el.modalTitle.textContent = r?.name || r?.sku || '—';
-      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${sku} • size ${r?.best_size || '—'}`;
+      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${sku} • Размер ${r?.best_size || '—'}`;
       if(this.el.modalImage) this.el.modalImage.src = r?.image_url || PLACEHOLDER_IMG;
 
-      if(this.el.modalScore) this.el.modalScore.textContent = String(Math.round(Number(r?.score ?? 0)));
+      const scoreVal = Number(r?.score ?? 0);
+      if(this.el.modalScore) this.el.modalScore.textContent = Math.round(scoreVal) + '%';
+
       if(this.el.modalExplain) {
-        // добавим ссылку на Builder прямо в explain блок (не ломая верстку)
-        this.el.modalExplain.innerHTML = `
-          <div>${esc(r?.explain || '—')}</div>
-          <div class="mt-3">
-            <a href="${builderUrl}" class="inline-block px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
+        // Разбиваем строку explain из main.py на красивые абзацы/пункты
+        const parts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
+        let html = '';
+        parts.forEach((p, idx) => {
+            // Заменяем теги цвета из rich на html (твой logic.py использует [green]текст[/green])
+            let cleanText = esc(p)
+                .replace(/\[green\](.*?)\[\/green\]/g, '<span class="text-green-600 font-bold">$1</span>')
+                .replace(/\[yellow\](.*?)\[\/yellow\]/g, '<span class="text-yellow-600 font-bold">$1</span>')
+                .replace(/\[red\](.*?)\[\/red\]/g, '<span class="text-red-600 font-bold">$1</span>')
+                .replace(/\[cyan\](.*?)\[\/cyan\]/g, '<span class="text-cyan-600 font-bold">$1</span>')
+                .replace(/\[magenta\](.*?)\[\/magenta\]/g, '<span class="text-purple-600 font-bold">$1</span>');
+
+            if (idx === 0) {
+                html += `<div class="font-black text-lg mb-3 pb-3 border-b border-gray-100">${cleanText}</div>`;
+            } else {
+                html += `<div class="flex items-start gap-2 mb-2"><span class="text-gray-400 mt-0.5">•</span><span>${cleanText}</span></div>`;
+            }
+        });
+        
+        html += `
+          <div class="mt-5 pt-4 border-t border-gray-100">
+            <a href="${builderUrl}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition">
               ✎ Редактировать в Builder
             </a>
           </div>
         `;
+        this.el.modalExplain.innerHTML = html;
       }
 
+      // Вывод всех собранных метрик (JSON) для отладки
       const m = r?.metrics || {};
-      const rows = Object.entries(m).map(([k,v])=> `
-        <div class="flex items-center justify-between gap-3 border-b border-gray-100 py-1">
-          <div class="text-xs text-gray-500">${esc(k)}</div>
-          <div class="text-xs font-black">${esc(typeof v==='number'?fmt(v):JSON.stringify(v))}</div>
+      const rows = Object.entries(m).map(([k,v])=> {
+        let valStr = typeof v==='number' ? fmt(v) : JSON.stringify(v);
+        // Если это объект (например, model_metrics), разворачиваем его для красоты
+        if (typeof v === 'object' && v !== null) {
+            valStr = Object.entries(v).map(([subK, subV]) => `${subK}: ${subV}`).join(', ');
+        }
+        return `
+        <div class="flex items-start justify-between gap-3 border-b last:border-0 border-gray-50 py-2">
+          <div class="text-xs text-gray-500 w-1/3 truncate">${esc(k)}</div>
+          <div class="text-xs font-bold text-right w-2/3 break-words">${esc(valStr)}</div>
         </div>
-      `).join('');
-      if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = rows || `<div class="text-sm text-gray-500">Нет данных</div>`;
-
-      if(this.el.realChest) this.el.realChest.value = '';
-      if(this.el.realShoulders) this.el.realShoulders.value = '';
-      if(this.el.realSleeve) this.el.realSleeve.value = '';
-      if(this.el.realLength) this.el.realLength.value = '';
-      if(this.el.realSaveNote) this.el.realSaveNote.textContent = '';
+      `}).join('');
+      
+      if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = rows || `<div class="text-sm text-gray-500">Нет данных о метриках</div>`;
 
       show(this.el.modal);
     }
@@ -426,48 +407,8 @@
     closeModal(){
       hide(this.el.modal);
     }
-
-    async saveRealMeasurements(){
-      const r = this.state.currentCard;
-      if(!r) return;
-
-      const rm = {};
-      const chest = Number(this.el.realChest?.value || 0);
-      const shoulders = Number(this.el.realShoulders?.value || 0);
-      const sleeve = Number(this.el.realSleeve?.value || 0);
-      const length = Number(this.el.realLength?.value || 0);
-
-      if(chest) rm.chest = chest;
-      if(shoulders) rm.shoulders = shoulders;
-      if(sleeve) rm.sleeve = sleeve;
-      if(length) rm.length = length;
-
-      const payload = {
-        garment_id: r.id,
-        user_id: this.state.activeProfileId,
-        size_selected: r.best_size || '',
-        judgment: 'ok',
-        real_measurements: Object.keys(rm).length ? rm : null
-      };
-
-      await api(API.feedback, {method:'POST', body: JSON.stringify(payload)});
-      if(this.el.realSaveNote) this.el.realSaveNote.textContent = 'Сохранено';
-      this.toast('Feedback сохранён');
-    }
-
-    async updateDb(){
-      await api(API.updateDb, {method:'POST'});
-      this.toast('База обновлена');
-      await this.refreshResults();
-    }
-
-    async refreshAll(){
-      await this.loadProfiles();
-      this.renderProfiles();
-      await this.refreshResults();
-    }
   }
 
+  // Запуск
   new App();
 })();
-

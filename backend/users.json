@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Иван (Стандартный M)",
+    "gender": "male",
+    "height": 175.0,
+    "chest": 100.0,
+    "waist": 85.0,
+    "hips": 100.0,
+    "shoulders": 45.0,
+    "arm_length": 62.0,
+    "leg_length": 105.0,
+    "inseam": 80.0
+  },
+  {
+    "name": "Алексей (Высокий и худой)",
+    "gender": "male",
+    "height": 190.0,
+    "chest": 95.0,
+    "waist": 80.0,
+    "hips": 95.0,
+    "shoulders": 46.0,
+    "arm_length": 66.0,
+    "leg_length": 112.0,
+    "inseam": 87.0
+  },
+  {
+    "name": "Сергей (Плотное телосложение)",
+    "gender": "male",
+    "height": 172.0,
+    "chest": 110.0,
+    "waist": 100.0,
+    "hips": 105.0,
+    "shoulders": 48.0,
+    "arm_length": 60.0,
+    "leg_length": 100.0,
+    "inseam": 74.0
+  },
+  {
+    "name": "Анна (Стандартный женский M)",
+    "gender": "female",
+    "height": 165.0,
+    "chest": 90.0,
+    "waist": 70.0,
+    "hips": 96.0,
+    "shoulders": 39.0,
+    "arm_length": 58.0,
+    "leg_length": 100.0,
+    "inseam": 76.0
+  }
+]

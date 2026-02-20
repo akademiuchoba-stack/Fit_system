@@ -3,51 +3,51 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Fit — Admin</title>
+  <title>Fit — Admin Panel</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900">
   <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-      <a href="/" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest">Назад</a>
+      <a href="/" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-xs uppercase tracking-widest hover:bg-gray-800 transition">Назад</a>
       <div class="min-w-0 flex-1">
         <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">Fit</div>
-        <div class="font-black text-base truncate">Admin</div>
+        <div class="font-black text-base truncate">Admin Panel</div>
       </div>
       <button id="btn-refresh" class="px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-xs uppercase tracking-widest hover:border-indigo-300 hover:text-indigo-700 transition">
-        Обновить
+        Обновить данные
       </button>
     </div>
   </header>
 
   <main class="max-w-6xl mx-auto px-4 py-5 pb-10 space-y-4">
-    <div id="toast" class="hidden p-3 rounded-2xl bg-gray-900 text-white text-sm"></div>
+    <div id="toast" class="hidden p-3 rounded-2xl bg-gray-900 text-white text-sm shadow-lg"></div>
 
     <section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-3">
-        <div class="font-black">Обзор</div>
+        <div class="font-black">Обзор базы данных</div>
         <div class="flex items-center gap-2">
-          <a href="/builder" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">
-            Builder
+          <a href="/builder" class="px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
+            ✎ Builder
           </a>
-          <button id="btn-update-db" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">
-            Обновить базу
+          <button id="btn-update-db" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-800 transition">
+            Сбросить кэш
           </button>
         </div>
       </div>
-      <div id="overview" class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+      <div id="overview" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
 
-      <div class="mt-3 p-3 rounded-2xl bg-gray-50 border border-gray-100 text-xs text-gray-600">
-        При нажатии “Обновить базу” backend запускает <b>shops/ostin_parser.py</b> и ждёт завершения.
+      <div class="mt-3 p-3 rounded-2xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-800">
+        <b>Важно:</b> Так как автоматический парсинг отключен, кнопка «Сбросить кэш» просто очищает оперативную память сервера. Нажимай её после добавления товаров в Builder'е, чтобы они моментально появились в ленте выдачи.
       </div>
     </section>
 
     <section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-3">
-        <div class="font-black">Товары</div>
+        <div class="font-black">Товары (Garments)</div>
         <div class="flex items-center gap-2">
-          <input id="garment-search" class="w-56 max-w-[60vw] px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm" placeholder="Поиск SKU / название">
-          <button id="btn-garment-search" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest">Искать</button>
+          <input id="garment-search" class="w-56 max-w-[60vw] px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Поиск SKU / Название">
+          <button id="btn-garment-search" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-800 transition">Искать</button>
         </div>
       </div>
       <div id="garments" class="mt-3 overflow-auto border border-gray-100 rounded-2xl"></div>
@@ -55,35 +55,12 @@
 
     <section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
       <div class="flex items-center justify-between gap-3">
-        <div class="font-black">Профили</div>
+        <div class="font-black">Профили пользователей</div>
       </div>
       <div id="profiles" class="mt-3 overflow-auto border border-gray-100 rounded-2xl"></div>
-    </section>
-
-    <section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
-      <div class="flex items-center justify-between gap-3">
-        <div class="font-black">Feedback</div>
-      </div>
-      <div id="feedback" class="mt-3 overflow-auto border border-gray-100 rounded-2xl"></div>
-    </section>
-
-    <section class="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
-      <div class="flex items-center justify-between gap-3">
-        <div class="font-black">Таблицы (быстрый просмотр)</div>
-      </div>
-      <div id="tables" class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
-
-      <div id="table-preview" class="mt-4 hidden">
-        <div class="flex items-center justify-between gap-3">
-          <div id="table-title" class="font-black"></div>
-          <button id="btn-close-preview" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest">Скрыть</button>
-        </div>
-        <div id="table-rows" class="mt-3 overflow-auto border border-gray-100 rounded-2xl"></div>
-      </div>
     </section>
   </main>
 
   <script src="/admin.js"></script>
 </body>
 </html>
-

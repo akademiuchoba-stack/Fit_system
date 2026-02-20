@@ -2,88 +2,171 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
   <script src="https://cdn.tailwindcss.com"></script>
-  <title>Fit — Builder</title>
+  <title>Fit — База и Примерка</title>
 </head>
-<body class="bg-slate-950 text-slate-100">
-<div class="max-w-4xl mx-auto p-4 space-y-6">
-
-  <div class="flex justify-between items-center gap-3">
-    <h1 class="text-2xl font-bold">Builder (ручной ввод)</h1>
-    <div class="flex gap-2">
-      <a href="/" class="px-3 py-2 rounded-xl bg-slate-800 text-sm">Главная</a>
-      <a href="/admin" class="px-3 py-2 rounded-xl bg-slate-800 text-sm">Админ</a>
+<body class="bg-gray-50 text-gray-900 pb-20">
+  
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <a href="/" class="w-9 h-9 rounded-2xl bg-gray-900 text-white flex items-center justify-center font-black text-base shadow">Fit</a>
+        <div class="font-black text-lg">Builder</div>
+      </div>
+      <div class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-600 px-3 py-1.5 bg-indigo-50 rounded-xl" id="current-sku-display">Новый товар</div>
     </div>
-  </div>
+  </header>
 
-  <div id="msg" class="text-sm text-slate-300"></div>
+  <main class="max-w-3xl mx-auto px-4 py-5">
+    <div id="msg" class="hidden mb-4 p-3 rounded-2xl bg-gray-900 text-white text-sm shadow-lg"></div>
 
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3">
-    <h2 class="font-semibold">Основное</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-      <input id="sku" placeholder="SKU (обязательно)" class="w-full p-2 rounded bg-slate-800">
-      <input id="name" placeholder="Название" class="w-full p-2 rounded bg-slate-800">
-      <input id="price" placeholder="Цена" type="number" class="w-full p-2 rounded bg-slate-800">
-      <input id="image_url" placeholder="URL фото" class="w-full p-2 rounded bg-slate-800">
+    <div class="flex gap-2 p-1 bg-gray-200/50 rounded-2xl mb-6">
+      <button id="tab-btn-theory" class="flex-1 py-2.5 rounded-xl font-black text-sm transition shadow-sm bg-white text-gray-900">ПК: База (Теория)</button>
+      <button id="tab-btn-practice" class="flex-1 py-2.5 rounded-xl font-black text-sm text-gray-500 transition hover:text-gray-900">Смартфон: Примерка</button>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-      <input id="size_label" placeholder="Размер (например M)" class="w-full p-2 rounded bg-slate-800">
-      <input id="platform" placeholder="platform (ostin/lamoda/manual)" class="w-full p-2 rounded bg-slate-800">
-      <label class="flex items-center gap-2 text-sm text-slate-300">
-        <input id="in_stock" type="checkbox" checked>
-        В наличии
-      </label>
+    <div id="tab-theory">
+      <div class="space-y-5">
+        
+        <div class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
+          <h2 class="font-black text-lg border-b border-gray-50 pb-2">1. Идентификация вещи</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <input id="sku" placeholder="SKU (Артикул)*" class="col-span-2 sm:col-span-1 w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 font-bold focus:ring-2 focus:ring-indigo-200 outline-none">
+            <input id="price" type="number" placeholder="Цена" class="col-span-2 sm:col-span-1 w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-indigo-200 outline-none">
+          </div>
+          <input id="name" placeholder="Название товара" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-indigo-200 outline-none">
+          <div class="grid grid-cols-2 gap-3">
+            <input id="img_front" placeholder="URL Фото (Спереди)" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-xs focus:ring-2 focus:ring-indigo-200 outline-none">
+            <input id="img_back" placeholder="URL Фото (Сзади)" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-xs focus:ring-2 focus:ring-indigo-200 outline-none">
+          </div>
+        </div>
+
+        <div class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
+          <h2 class="font-black text-lg border-b border-gray-50 pb-2">2. Данные с сайтов (Теория)</h2>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Категория</span>
+              <select id="cat_type" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+                <option value="top">Верх</option>
+                <option value="bottom">Низ</option>
+                <option value="full">Цельное (Платье)</option>
+              </select>
+            </label>
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Силуэт</span>
+              <select id="fit_profile" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+                <option value="regular">Regular</option>
+                <option value="slim">Slim</option>
+                <option value="oversize">Oversize</option>
+              </select>
+            </label>
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Эластан (%)</span>
+              <input id="elastane" type="number" value="0" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-center">
+            </label>
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Платформа</span>
+              <select id="platform" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+                <option value="ostin">O'stin</option>
+                <option value="lamoda">Lamoda</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-50 mt-4">
+            <div class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-800 mb-3">Тело модели на фото (Для расчета "Точки 0")</div>
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <input id="m_size" placeholder="Размер (M)" class="px-3 py-2 rounded-xl border border-gray-200">
+              <input id="m_height" type="number" placeholder="Рост" class="px-3 py-2 rounded-xl border border-gray-200">
+              <input id="m_chest" type="number" placeholder="Грудь" class="px-3 py-2 rounded-xl border border-gray-200">
+              <input id="m_waist" type="number" placeholder="Талия" class="px-3 py-2 rounded-xl border border-gray-200">
+              <input id="m_hips" type="number" placeholder="Бедра" class="px-3 py-2 rounded-xl border border-gray-200">
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-save-theory" class="w-full py-4 rounded-2xl bg-gray-900 text-white font-black text-sm uppercase tracking-widest hover:bg-indigo-600 transition shadow-lg">
+          Сохранить в базу
+        </button>
+      </div>
     </div>
-  </div>
 
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3">
-    <h2 class="font-semibold">Реальные замеры вещи (как померял в магазине)</h2>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-      <input id="g_chest" placeholder="Грудь изделия" type="number" class="p-2 rounded bg-slate-800">
-      <input id="g_waist" placeholder="Талия изделия" type="number" class="p-2 rounded bg-slate-800">
-      <input id="g_hips" placeholder="Бёдра изделия" type="number" class="p-2 rounded bg-slate-800">
-      <input id="g_length" placeholder="Длина" type="number" class="p-2 rounded bg-slate-800">
-      <input id="g_sleeve" placeholder="Рукав" type="number" class="p-2 rounded bg-slate-800">
-      <input id="g_shoulders" placeholder="Плечи" type="number" class="p-2 rounded bg-slate-800">
+
+    <div id="tab-practice" class="hidden">
+      <div class="space-y-5">
+        
+        <div class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-gray-50 pb-2">
+            <h2 class="font-black text-lg">Замеры рулеткой (Истина)</h2>
+            <div class="text-[10px] uppercase font-bold text-gray-400">Ground Truth</div>
+          </div>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <input id="gt_size" placeholder="Размер (напр. L)*" class="col-span-2 sm:col-span-3 px-4 py-3 rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 font-bold focus:ring-2 outline-none text-center">
+            <input id="gt_chest" type="number" placeholder="Грудь (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+            <input id="gt_waist" type="number" placeholder="Талия (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+            <input id="gt_hips" type="number" placeholder="Бедра (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+            <input id="gt_sleeve" type="number" placeholder="Рукав (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+            <input id="gt_inseam" type="number" placeholder="Шаг. шов (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+            <input id="gt_length" type="number" placeholder="Длина общ. (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+          </div>
+          
+          <button id="btn-add-gt" class="w-full py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-600 font-bold text-sm uppercase tracking-wider hover:bg-gray-50 transition">
+            + Добавить замер в матрицу
+          </button>
+          
+          <div id="gt_list" class="space-y-2 mt-2"></div>
+        </div>
+
+        <div class="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-gray-50 pb-2">
+            <h2 class="font-black text-lg">Примерка (Фидбек)</h2>
+          </div>
+
+          <select id="fb_profile" class="w-full px-4 py-3 rounded-2xl border-2 border-gray-200 bg-white font-bold"></select>
+          
+          <div class="grid grid-cols-2 gap-3">
+             <input id="fb_size" placeholder="Какой размер меряли? (L)*" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 font-bold">
+          </div>
+
+          <label class="flex items-center gap-3 p-4 rounded-2xl border-2 border-green-100 bg-green-50/50 cursor-pointer">
+            <input id="fb_point_zero" type="checkbox" class="w-6 h-6 rounded text-green-600 focus:ring-green-500">
+            <span class="font-black text-green-800">ЭТО МОЯ "ТОЧКА НОЛЬ" (Идеальная посадка)</span>
+          </label>
+
+          <div class="space-y-3 mt-4">
+            <div class="text-[11px] font-extrabold uppercase text-gray-500">Матрица ощущений</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <select id="fb_chest" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+                <option value="">Ширина (Грудь/Бедра)</option>
+                <option value="tight">Жмет / Тесно</option>
+                <option value="perfect">Идеально</option>
+                <option value="loose">Свободно / Болтается</option>
+              </select>
+              <select id="fb_length" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+                <option value="">Длина (Рукав/Штанины)</option>
+                <option value="short">Коротко (Подстрел)</option>
+                <option value="perfect">Идеально</option>
+                <option value="long">Длинно (Нужно подшивать)</option>
+              </select>
+              <select id="fb_belly" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+                <option value="">Живот (Посадка спереди)</option>
+                <option value="rises">Подскакивает (Коротко спереди)</option>
+                <option value="perfect">Лежит ровно</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="btn-save-fb" class="w-full py-4 rounded-2xl bg-indigo-600 text-white font-black text-sm uppercase tracking-widest hover:bg-indigo-700 transition shadow-lg mt-4">
+            Отправить фидбек
+          </button>
+        </div>
+
+      </div>
     </div>
-  </div>
 
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3">
-    <h2 class="font-semibold">Примерка</h2>
-    <select id="fit_score" class="w-full p-2 rounded bg-slate-800">
-      <option value="">Оценка посадки</option>
-      <option value="-2">-2 сильно мало</option>
-      <option value="-1">-1 мало</option>
-      <option value="0">0 идеально</option>
-      <option value="1">1 свободно</option>
-      <option value="2">2 сильно свободно</option>
-    </select>
-    <label class="flex items-center gap-2 text-sm text-slate-300">
-      <input id="ideal" type="checkbox">
-      Идеально для меня
-    </label>
-    <textarea id="notes" placeholder="Комментарий" class="w-full p-2 rounded bg-slate-800 h-20"></textarea>
-  </div>
+  </main>
 
-  <div class="flex flex-col md:flex-row gap-2">
-    <button id="btnSave" class="flex-1 bg-green-500 text-black font-semibold p-3 rounded-2xl">Сохранить</button>
-    <button id="btnDelete" class="flex-1 bg-red-500 text-black font-semibold p-3 rounded-2xl hidden">Удалить товар</button>
-    <button id="btnNew" class="flex-1 bg-slate-800 font-semibold p-3 rounded-2xl">Новый</button>
-  </div>
-
-  <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
-    <div class="flex items-center justify-between">
-      <h2 class="font-semibold">Последние товары</h2>
-      <button id="btnRefresh" class="text-sm text-sky-300">обновить</button>
-    </div>
-    <div id="items" class="mt-3 space-y-2"></div>
-  </div>
-
-</div>
-
-<script src="/builder.js"></script>
+  <script src="/builder.js"></script>
 </body>
 </html>
 

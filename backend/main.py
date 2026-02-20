@@ -270,11 +270,17 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     return results[:limit]
 
 # -----------------------------
-# FEEDBACK
+# FEEDBACK (МАТРИЦА ПРИМЕРКИ)
 # -----------------------------
 @app.post("/api/feedback")
 def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
-    new_fb = models.Feedback(garment_id=fb.garment_id, user_id=str(fb.user_id), size_selected=fb.size_selected, judgment=fb.judgment, real_measurements=fb.real_measurements)
+    new_fb = models.Feedback(
+        garment_id=fb.garment_id, 
+        user_id=fb.user_id, 
+        size_selected=fb.size_selected, 
+        is_point_zero=fb.is_point_zero, 
+        fit_matrix=fb.fit_matrix
+    )
     db.add(new_fb)
     db.commit()
     return {"status": "success"}
@@ -336,27 +342,28 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
         g = models.Garment(sku=sku)
         created = True
 
+    # 1. Основное (Идентификация)
     g.name = (payload.get("name") or g.name or sku).strip()
     g.platform = (payload.get("platform") or g.platform or "manual").strip()
     if payload.get("image_url"): g.image_url = payload.get("image_url").strip()
+    if payload.get("image_url_back"): g.image_url_back = payload.get("image_url_back").strip()
     
     pr = _coerce_float(payload.get("price"))
     if pr is not None: g.price = pr
     g.in_stock = bool(payload.get("in_stock", True))
 
-    size_label = (payload.get("size_label") or "M").strip().upper()
-    allm = dict(g.metrics or {})
-    allm.setdefault(size_label, {})
-    block = dict(allm.get(size_label) or {})
+    # 2. Формируем JSON структуру metrics (Теория + Истина)
+    current_metrics = dict(g.metrics or {})
+    
+    # Сохраняем теоретические данные (с сайта)
+    if "theory" in payload:
+        current_metrics["theory"] = payload["theory"]
+        
+    # Сохраняем практические данные рулетки (ground_truth)
+    if "ground_truth" in payload:
+        current_metrics["ground_truth"] = payload["ground_truth"]
 
-    if isinstance(payload.get("real_measurements"), dict): block["real_measurements"] = payload.get("real_measurements")
-    if isinstance(payload.get("try_on"), dict): block["try_on"] = payload.get("try_on")
-
-    for key in ["fit_profile", "category_type", "fabric", "elastane_pct", "model_metrics", "model_size"]:
-        if payload.get(key) is not None: block[key] = payload.get(key)
-
-    allm[size_label] = block
-    g.metrics = allm
+    g.metrics = current_metrics
 
     db.add(g)
     db.commit()

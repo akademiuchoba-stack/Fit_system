@@ -152,10 +152,6 @@ def extract_smart_model(metrics: dict):
 # -----------------------------
 @app.post("/api/webhook-deploy")
 def webhook_deploy():
-    """
-    Эндпоинт для автоматического деплоя из GitHub.
-    Выполняет git pull и перезапускает systemd сервис.
-    """
     logger.info("Received deploy webhook. Initiating update...")
     try:
         git_pull = subprocess.run(["git", "pull"], cwd=str(BASE_DIR), capture_output=True, text=True, timeout=30)
@@ -174,13 +170,13 @@ def webhook_deploy():
 @app.get("/api/profiles")
 def list_profiles(db: Session = Depends(database.get_db)):
     profiles = db.query(models.BodyProfile).order_by(models.BodyProfile.updated_at.desc()).all()
-    return [{"id": p.id, "name": p.name, "gender": p.gender, "height": p.height, "chest": p.chest, "shoulders": p.shoulders, "waist": p.waist, "hips": p.hips, "arm_length": p.arm_length, "leg_length": p.leg_length} for p in profiles]
+    return [{"id": p.id, "name": p.name, "gender": p.gender, "height": p.height, "chest": p.chest, "shoulders": p.shoulders, "waist": p.waist, "hips": p.hips, "arm_length": p.arm_length, "leg_length": p.leg_length, "inseam": p.inseam} for p in profiles]
 
 @app.get("/api/profiles/{profile_id}")
 def get_profile(profile_id: int, db: Session = Depends(database.get_db)):
     p = db.query(models.BodyProfile).filter(models.BodyProfile.id == profile_id).first()
     if not p: raise HTTPException(status_code=404, detail="Profile not found")
-    return {"id": p.id, "name": p.name, "gender": p.gender, "height": p.height, "chest": p.chest, "shoulders": p.shoulders, "waist": p.waist, "hips": p.hips, "arm_length": p.arm_length, "leg_length": p.leg_length}
+    return {"id": p.id, "name": p.name, "gender": p.gender, "height": p.height, "chest": p.chest, "shoulders": p.shoulders, "waist": p.waist, "hips": p.hips, "arm_length": p.arm_length, "leg_length": p.leg_length, "inseam": p.inseam}
 
 @app.post("/api/profiles")
 def create_or_update_profile(payload: models.BodyProfileCreate, db: Session = Depends(database.get_db)):
@@ -213,7 +209,6 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
     if not profile: raise HTTPException(status_code=404, detail="Profile not found")
 
-    # Собираем пользователя под новый формат logic.Profile (с расчетом шагового шва)
     user = logic.Profile(
         height=profile.height or 175.0,
         chest=profile.chest or 100.0,
@@ -222,7 +217,7 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
         shoulders=profile.shoulders or 45.0,
         arm_length=profile.arm_length or 62.0,
         outseam=profile.leg_length or 105.0,
-        inseam=(profile.leg_length - 25) if profile.leg_length else 80.0
+        inseam=profile.inseam or 80.0
     )
 
     items = get_cached_items(db)
@@ -238,14 +233,12 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
         best_size = None
         best_explain = ""
 
-        # Перебираем доступные размеры вещи из базы
         for size_label in all_sizes.keys():
             fit_res = logic.calculate_fit(user, model_size, base_data, size_label)
 
             if fit_res.score > best_score:
                 best_score = fit_res.score
                 best_size = size_label
-                # Собираем пояснения в одну строку для фронта
                 explain_parts = [f"{fit_res.status} ({fit_res.score:.0f}%)"]
                 explain_parts.extend(fit_res.details.values())
                 explain_parts.extend(fit_res.warnings)
@@ -270,10 +263,11 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     return results[:limit]
 
 # -----------------------------
-# FEEDBACK (МАТРИЦА ПРИМЕРКИ)
+# FEEDBACK (С Аналитикой для Builder'а)
 # -----------------------------
 @app.post("/api/feedback")
 def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
+    # 1. Сохраняем фидбек в базу
     new_fb = models.Feedback(
         garment_id=fb.garment_id, 
         user_id=fb.user_id, 
@@ -283,10 +277,84 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
     )
     db.add(new_fb)
     db.commit()
-    return {"status": "success"}
+
+    # 2. Мгновенная генерация A/B Аналитики для телефона
+    analysis = None
+    garment = db.query(models.Garment).filter(models.Garment.id == fb.garment_id).first()
+    
+    # Проверка, что профиль передан как числовой ID
+    profile = None
+    if fb.user_id and fb.user_id.isdigit():
+        profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == int(fb.user_id)).first()
+
+    if garment and profile and garment.metrics:
+        user = logic.Profile(
+            height=profile.height or 175.0,
+            chest=profile.chest or 100.0,
+            waist=profile.waist or 85.0,
+            hips=profile.hips or 100.0,
+            shoulders=profile.shoulders or 45.0,
+            arm_length=profile.arm_length or 62.0,
+            outseam=profile.leg_length or 105.0,
+            inseam=profile.inseam or 80.0
+        )
+
+        theory = garment.metrics.get("theory", {})
+        ground_truth = garment.metrics.get("ground_truth", {})
+
+        if theory:
+            cat_type = theory.get("category_type", "top")
+            fit_profile = theory.get("fit_profile", "regular")
+            elastane = theory.get("elastane_pct", 0)
+            model_size = theory.get("model_size", "M")
+
+            # РАСЧЕТ А (По данным сайта)
+            best_t_score = -1
+            best_t_size = None
+            for sz in ['S', 'M', 'L', 'XL', 'XXL', '3XL']:
+                res = logic.calculate_fit(user, model_size, theory, sz)
+                if res.score > best_t_score:
+                    best_t_score = res.score
+                    best_t_size = sz
+
+            # РАСЧЕТ Б (По реальным замерам рулеткой)
+            best_gt_score = -1
+            best_gt_size = None
+            if ground_truth:
+                ideal_ease = logic.DESIGN_EASE.get(fit_profile.lower(), logic.DESIGN_EASE['regular'])
+                base_ease_chest = ideal_ease['top'] if cat_type.lower() == 'top' else ideal_ease['bottom']
+                base_ease_waist = ideal_ease['bottom']
+                base_ease_hips = ideal_ease['bottom']
+
+                for gt_size, gt_meas in ground_truth.items():
+                    fake_base_data = {
+                        'category_type': cat_type,
+                        'fit_profile': fit_profile,
+                        'elastane_pct': elastane,
+                        'height': theory.get('height', 175.0),
+                    }
+                    if 'chest' in gt_meas: fake_base_data['chest'] = gt_meas['chest'] - base_ease_chest
+                    if 'waist' in gt_meas: fake_base_data['waist'] = gt_meas['waist'] - base_ease_waist
+                    if 'hips' in gt_meas: fake_base_data['hips'] = gt_meas['hips'] - base_ease_hips
+                    if 'inseam' in gt_meas: fake_base_data['inseam'] = gt_meas['inseam']
+
+                    res = logic.calculate_fit(user, gt_size, fake_base_data, gt_size)
+                    if res.score > best_gt_score:
+                        best_gt_score = res.score
+                        best_gt_size = gt_size
+
+            analysis = {
+                "theory_size": best_t_size,
+                "theory_score": round(best_t_score),
+                "gt_size": best_gt_size,
+                "gt_score": round(best_gt_score) if best_gt_score != -1 else None,
+                "match": (best_t_size == best_gt_size) if best_gt_size else None
+            }
+
+    return {"status": "success", "analysis": analysis}
 
 # -----------------------------
-# ADMIN: CLEAR CACHE (Replacement for update-db)
+# ADMIN: CLEAR CACHE 
 # -----------------------------
 @app.post("/api/admin/update-db")
 def admin_update_db(db: Session = Depends(database.get_db)):
@@ -342,7 +410,6 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
         g = models.Garment(sku=sku)
         created = True
 
-    # 1. Основное (Идентификация)
     g.name = (payload.get("name") or g.name or sku).strip()
     g.platform = (payload.get("platform") or g.platform or "manual").strip()
     if payload.get("image_url"): g.image_url = payload.get("image_url").strip()
@@ -352,16 +419,9 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
     if pr is not None: g.price = pr
     g.in_stock = bool(payload.get("in_stock", True))
 
-    # 2. Формируем JSON структуру metrics (Теория + Истина)
     current_metrics = dict(g.metrics or {})
-    
-    # Сохраняем теоретические данные (с сайта)
-    if "theory" in payload:
-        current_metrics["theory"] = payload["theory"]
-        
-    # Сохраняем практические данные рулетки (ground_truth)
-    if "ground_truth" in payload:
-        current_metrics["ground_truth"] = payload["ground_truth"]
+    if "theory" in payload: current_metrics["theory"] = payload["theory"]
+    if "ground_truth" in payload: current_metrics["ground_truth"] = payload["ground_truth"]
 
     g.metrics = current_metrics
 
@@ -374,10 +434,8 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
 def builder_delete(sku: str = Query(...), db: Session = Depends(database.get_db)):
     g = db.query(models.Garment).filter(models.Garment.sku == sku.strip()).first()
     if g:
-        # Удаляем привязанные оценки и отзывы, чтобы не было ошибки FOREIGN KEY constraint failed
         db.query(models.Prior).filter(models.Prior.garment_id == g.id).delete()
         db.query(models.Feedback).filter(models.Feedback.garment_id == g.id).delete()
-        
         db.delete(g)
         db.commit()
         invalidate_items_cache()

@@ -44,20 +44,16 @@
         cards: qs('#cards'),
         emptyState: qs('#empty-state'),
         btnOpenCabinet: qs('#btn-open-cabinet'),
-
         btnRefresh: qs('#btn-refresh'),
         btnCabinet: qs('#btn-cabinet'),
         btnBack: qs('#btn-back'),
         btnAdmin: qs('#btn-admin'),
-
         profiles: qs('#profiles'),
         profilesEmpty: qs('#profiles-empty'),
-
         form: qs('#profile-form'),
         formTitle: qs('#form-title'),
         btnClearForm: qs('#btn-clear-form'),
         btnCancelEdit: qs('#btn-cancel-edit'),
-
         modal: qs('#modal'),
         btnCloseModal: qs('#btn-close-modal'),
         modalTitle: qs('#modal-title'),
@@ -84,12 +80,9 @@
       if(this.el.btnOpenCabinet) this.el.btnOpenCabinet.addEventListener('click', ()=> this.showCabinet());
       if(this.el.btnBack) this.el.btnBack.addEventListener('click', ()=> this.showMain());
       if(this.el.btnRefresh) this.el.btnRefresh.addEventListener('click', ()=> this.refreshResults());
-
       if(this.el.btnAdmin) this.el.btnAdmin.addEventListener('click', ()=> { window.location.href = '/admin'; });
-
       if(this.el.btnCloseModal) this.el.btnCloseModal.addEventListener('click', ()=> this.closeModal());
       if(this.el.modal) this.el.modal.addEventListener('click', (e)=> { if(e.target === this.el.modal) this.closeModal(); });
-
       if(this.el.btnClearForm) this.el.btnClearForm.addEventListener('click', ()=> this.clearForm());
       if(this.el.btnCancelEdit) this.el.btnCancelEdit.addEventListener('click', ()=> this.clearForm());
 
@@ -148,7 +141,6 @@
 
       for(const p of items){
         const isActive = p.id === this.state.activeProfileId;
-
         const row = document.createElement('div');
         row.className = `p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition cursor-pointer`;
 
@@ -160,7 +152,7 @@
                 ${isActive ? `<span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-600 text-white">активен</span>` : ''}
               </div>
               <div class="text-xs text-gray-600 mt-1">
-                Рост ${fmt(p.height)} • Г ${fmt(p.chest)} • П ${fmt(p.shoulders)} • Т ${fmt(p.waist)} • Б ${fmt(p.hips)}
+                Рост ${fmt(p.height)} • Г ${fmt(p.chest)} • Т ${fmt(p.waist)} • Б ${fmt(p.hips)} • ШШ ${fmt(p.inseam)}
               </div>
             </div>
           </div>
@@ -175,7 +167,6 @@
         row.addEventListener('click', (e)=> {
           const btn = e.target?.closest('button[data-act]');
           if(!btn) {
-              // Если клик не по кнопке, просто делаем профиль активным
               this.setActiveProfile(p.id);
               this.refreshResults().catch(()=>{});
               return;
@@ -214,6 +205,7 @@
       f.hips.value = p.hips ?? '';
       f.arm_length.value = p.arm_length ?? '';
       f.leg_length.value = p.leg_length ?? '';
+      f.inseam.value = p.inseam ?? '';
       f.id.value = p.id ?? '';
       show(this.el.btnCancelEdit);
     }
@@ -241,6 +233,7 @@
         hips: Number(f.hips.value || 0),
         arm_length: Number(f.arm_length.value || 0),
         leg_length: Number(f.leg_length.value || 0),
+        inseam: Number(f.inseam.value || 0),
       };
 
       if(!payload.name) throw new Error('Имя профиля обязательно');
@@ -312,8 +305,6 @@
         if (scoreVal < 45) scoreColor = 'text-red-600 bg-red-50 border-red-200';
 
         const sku = r?.sku || '';
-
-        // Разбиваем explain на главную фразу и остальное
         const explainParts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
         const mainVerdict = explainParts[0] || 'Нет данных';
 
@@ -355,11 +346,9 @@
       if(this.el.modalScore) this.el.modalScore.textContent = Math.round(scoreVal) + '%';
 
       if(this.el.modalExplain) {
-        // Разбиваем строку explain из main.py на красивые абзацы/пункты
         const parts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
         let html = '';
         parts.forEach((p, idx) => {
-            // Заменяем теги цвета из rich на html (твой logic.py использует [green]текст[/green])
             let cleanText = esc(p)
                 .replace(/\[green\](.*?)\[\/green\]/g, '<span class="text-green-600 font-bold">$1</span>')
                 .replace(/\[yellow\](.*?)\[\/yellow\]/g, '<span class="text-yellow-600 font-bold">$1</span>')
@@ -384,11 +373,9 @@
         this.el.modalExplain.innerHTML = html;
       }
 
-      // Вывод всех собранных метрик (JSON) для отладки
       const m = r?.metrics || {};
       const rows = Object.entries(m).map(([k,v])=> {
         let valStr = typeof v==='number' ? fmt(v) : JSON.stringify(v);
-        // Если это объект (например, model_metrics), разворачиваем его для красоты
         if (typeof v === 'object' && v !== null) {
             valStr = Object.entries(v).map(([subK, subV]) => `${subK}: ${subV}`).join(', ');
         }
@@ -409,6 +396,5 @@
     }
   }
 
-  // Запуск
   new App();
 })();

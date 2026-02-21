@@ -1,18 +1,15 @@
 (() => {
   let currentGarment = null;
-  let groundTruthData = {}; // Локальное хранилище замеров { "L": {chest: 100, ...} }
+  let groundTruthData = {};
 
   const el = {
     msg: document.getElementById('msg'),
     skuDisplay: document.getElementById('current-sku-display'),
-    
-    // Tabs
     btnTheory: document.getElementById('tab-btn-theory'),
     btnPractice: document.getElementById('tab-btn-practice'),
     tabTheory: document.getElementById('tab-theory'),
     tabPractice: document.getElementById('tab-practice'),
 
-    // Theory Inputs
     sku: document.getElementById('sku'),
     price: document.getElementById('price'),
     name: document.getElementById('name'),
@@ -29,7 +26,6 @@
     mHips: document.getElementById('m_hips'),
     btnSaveTheory: document.getElementById('btn-save-theory'),
 
-    // Practice Inputs (Ground Truth)
     gtSize: document.getElementById('gt_size'),
     gtChest: document.getElementById('gt_chest'),
     gtWaist: document.getElementById('gt_waist'),
@@ -40,7 +36,6 @@
     btnAddGt: document.getElementById('btn-add-gt'),
     gtList: document.getElementById('gt_list'),
 
-    // Feedback Inputs
     fbProfile: document.getElementById('fb_profile'),
     fbSize: document.getElementById('fb_size'),
     fbPointZero: document.getElementById('fb_point_zero'),
@@ -48,6 +43,11 @@
     fbLength: document.getElementById('fb_length'),
     fbBelly: document.getElementById('fb_belly'),
     btnSaveFb: document.getElementById('btn-save-fb'),
+
+    analysisResult: document.getElementById('analysis-result'),
+    resTheory: document.getElementById('res-theory'),
+    resGt: document.getElementById('res-gt'),
+    resVerdict: document.getElementById('res-verdict')
   };
 
   function showMsg(text, isError=false) {
@@ -94,7 +94,6 @@
     currentGarment = g;
     el.skuDisplay.textContent = g.sku || 'Новый товар';
     
-    // 1. Основное
     el.sku.value = g.sku || '';
     el.name.value = g.name || '';
     el.price.value = g.price || '';
@@ -106,7 +105,6 @@
     const theory = metrics.theory || {};
     groundTruthData = metrics.ground_truth || {};
 
-    // 2. Теория
     el.catType.value = theory.category_type || 'top';
     el.fitProfile.value = theory.fit_profile || 'regular';
     el.elastane.value = theory.elastane_pct || 0;
@@ -131,11 +129,10 @@
       try {
         const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(sku)}`);
         populateForm(data);
-      } catch (e) { showMsg("Товар не найден, создаем новый", true); }
+      } catch (e) { showMsg("Товар не найден", true); }
     }
   }
 
-  // --- СОХРАНЕНИЕ ТЕОРИИ ---
   el.btnSaveTheory.addEventListener('click', async () => {
     const sku = el.sku.value.trim();
     if (!sku) return showMsg("SKU обязателен!", true);
@@ -163,11 +160,10 @@
       await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
       showMsg("Товар и Теория успешно сохранены!");
       el.skuDisplay.textContent = sku;
-      if (!currentGarment) currentGarment = { id: 999 }; // Dummy ID to allow feedback
+      if (!currentGarment) currentGarment = { id: 999 };
     } catch (e) { showMsg(e.message, true); }
   });
 
-  // --- ЛОГИКА GROUND TRUTH (Рулетка) ---
   function renderGtList() {
     const sizes = Object.keys(groundTruthData);
     if (!sizes.length) {
@@ -208,7 +204,6 @@
 
     groundTruthData[size] = m;
     
-    // Очищаем инпуты рулетки
     [el.gtSize, el.gtChest, el.gtWaist, el.gtHips, el.gtSleeve, el.gtInseam, el.gtLength].forEach(i => i.value = '');
     
     renderGtList();
@@ -227,7 +222,6 @@
     } catch (e) { showMsg(e.message, true); }
   }
 
-  // --- ОТПРАВКА ФИДБЕКА ---
   el.btnSaveFb.addEventListener('click', async () => {
     if (!currentGarment || !currentGarment.id) return showMsg("Сначала сохрани товар (Теорию)!", true);
     
@@ -251,13 +245,26 @@
     };
 
     try {
-      await api('/api/feedback', { method: 'POST', body: JSON.stringify(payload) });
+      const data = await api('/api/feedback', { method: 'POST', body: JSON.stringify(payload) });
       showMsg("Примерка успешно отправлена!");
       
-      // Сброс формы фидбека
-      el.fbSize.value = '';
-      el.fbPointZero.checked = false;
-      [el.fbChest, el.fbLength, el.fbBelly].forEach(i => i.value = '');
+      // Вывод A/B Аналитики
+      if(data.analysis) {
+        el.analysisResult.classList.remove('hidden');
+        el.resTheory.textContent = data.analysis.theory_size ? `${data.analysis.theory_size} (${data.analysis.theory_score}%)` : 'Нет данных';
+        el.resGt.textContent = data.analysis.gt_size ? `${data.analysis.gt_size} (${data.analysis.gt_score}%)` : 'Нет данных';
+        
+        if (data.analysis.match === true) {
+            el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-green-100 text-green-800";
+            el.resVerdict.textContent = "Совпадение! Данные магазина верны.";
+        } else if (data.analysis.match === false) {
+            el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-red-100 text-red-800";
+            el.resVerdict.textContent = `Ошибка магазина! Реальный размер: ${data.analysis.gt_size}`;
+        } else {
+            el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-gray-100 text-gray-800";
+            el.resVerdict.textContent = "Недостаточно данных для сравнения.";
+        }
+      }
 
     } catch (e) { showMsg(e.message, true); }
   });

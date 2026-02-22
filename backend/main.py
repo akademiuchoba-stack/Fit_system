@@ -22,9 +22,6 @@ from . import models, database, logic, calibration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("fit_backend")
 
-# -----------------------------
-# FASTAPI APP
-# -----------------------------
 app = FastAPI(title="Fit_system API", version="2.0.0")
 
 app.add_middleware(
@@ -35,9 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------
-# PATHS
-# -----------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
@@ -48,14 +42,8 @@ ADMIN_JS_FILE = FRONTEND_DIR / "admin.js"
 BUILDER_FILE = FRONTEND_DIR / "builder.html"
 BUILDER_JS_FILE = FRONTEND_DIR / "builder.js"
 
-# -----------------------------
-# INIT DB
-# -----------------------------
 models.Base.metadata.create_all(bind=database.engine)
 
-# -----------------------------
-# CACHE ITEMS
-# -----------------------------
 _ITEMS_CACHE = {"ts": 0.0, "items": None}
 CACHE_TTL_SEC = int(os.getenv("FIT_ITEMS_CACHE_TTL", "10"))
 
@@ -87,69 +75,12 @@ def garment_to_dict(g: models.Garment) -> Dict[str, Any]:
         "name": g.name,
         "platform": g.platform,
         "image_url": g.image_url,
+        "image_url_back": getattr(g, "image_url_back", None),
         "price": g.price,
         "in_stock": bool(g.in_stock),
         "metrics": g.metrics or {},
     }
 
-def feedback_to_dict(f: models.Feedback) -> Dict[str, Any]:
-    return {
-        "id": getattr(f, "id", None),
-        "garment_id": getattr(f, "garment_id", None),
-        "user_id": getattr(f, "user_id", None),
-        "size_selected": getattr(f, "size_selected", None),
-        "judgment": getattr(f, "judgment", None),
-        "real_measurements": getattr(f, "real_measurements", None),
-        "created_at": getattr(f, "created_at", None).isoformat() if getattr(f, "created_at", None) else None,
-    }
-
-# --- ИНТЕГРАЦИЯ ЛОГИКИ ИЗ debug_feed.py ---
-def get_best_value(field, metrics, is_biometry=False):
-    main_key = None
-    for k in metrics.keys():
-        if k not in ['size_chart', 'sources'] and isinstance(metrics[k], dict):
-            main_key = k
-            break
-            
-    if not main_key: return None
-    work_zone = metrics[main_key]
-    
-    sources = [work_zone]
-    if is_biometry:
-        sources = [work_zone.get('model_metrics', {})]
-
-    for src in sources:
-        if not isinstance(src, dict): continue
-        val = src.get(field)
-        if val:
-            if is_biometry or field == 'elastane_pct':
-                try: return float(val)
-                except: pass
-            else:
-                return str(val)
-    return None
-
-def extract_smart_model(metrics: dict):
-    model_size = get_best_value('model_size', metrics) or 'M'
-    chest = get_best_value('chest', metrics, True)
-    waist = get_best_value('waist', metrics, True)
-    hips = get_best_value('hips', metrics, True)
-    height = get_best_value('height', metrics, True)
-    
-    smart_data = {
-        'chest': chest or 90.0,
-        'waist': waist or 70.0,
-        'hips': hips or 95.0,
-        'height': height or 175.0,
-        'fit_profile': get_best_value('fit_profile', metrics) or 'regular',
-        'category_type': get_best_value('category_type', metrics) or 'top',
-        'elastane_pct': get_best_value('elastane_pct', metrics) or 0.0,
-    }
-    return model_size, smart_data
-
-# -----------------------------
-# SYSTEM: WEBHOOK DEPLOY
-# -----------------------------
 @app.post("/api/webhook-deploy")
 def webhook_deploy():
     logger.info("Received deploy webhook. Initiating update...")
@@ -164,9 +95,6 @@ def webhook_deploy():
         logger.exception("Deploy failed")
         raise HTTPException(status_code=500, detail=str(e))
 
-# -----------------------------
-# PROFILES CRUD
-# -----------------------------
 @app.get("/api/profiles")
 def list_profiles(db: Session = Depends(database.get_db)):
     profiles = db.query(models.BodyProfile).order_by(models.BodyProfile.updated_at.desc()).all()
@@ -201,9 +129,6 @@ def delete_profile(profile_id: int, db: Session = Depends(database.get_db)):
         db.commit()
     return {"status": "deleted"}
 
-# -----------------------------
-# CALCULATE (FOR FRONT CARDS)
-# -----------------------------
 @app.post("/api/calculate")
 def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(database.get_db), limit: int = Query(30, ge=1, le=200)):
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
@@ -224,17 +149,19 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     results = []
 
     for item in items:
-        all_sizes = item.metrics or {}
-        if not isinstance(all_sizes, dict) or not all_sizes: continue
+        metrics = item.metrics or {}
+        theory = metrics.get("theory")
+        if not theory: continue
 
-        model_size, base_data = extract_smart_model(all_sizes)
+        model_size = theory.get("model_size", "M")
         
         best_score = -1e18
         best_size = None
         best_explain = ""
 
-        for size_label in all_sizes.keys():
-            fit_res = logic.calculate_fit(user, model_size, base_data, size_label)
+        # ПРИНУДИТЕЛЬНЫЙ ПЕРЕБОР ВСЕХ РАЗМЕРОВ (XS -> 3XL)
+        for size_label in logic.SIZES_ORDER:
+            fit_res = logic.calculate_fit(user, model_size, theory, size_label)
 
             if fit_res.score > best_score:
                 best_score = fit_res.score
@@ -256,18 +183,14 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
             "best_size": best_size,
             "score": float(best_score),
             "explain": best_explain,
-            "metrics": all_sizes.get(best_size, {}),
+            "metrics": metrics,
         })
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
     return results[:limit]
 
-# -----------------------------
-# FEEDBACK (С Аналитикой для Builder'а)
-# -----------------------------
 @app.post("/api/feedback")
 def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.get_db)):
-    # 1. Сохраняем фидбек в базу
     new_fb = models.Feedback(
         garment_id=fb.garment_id, 
         user_id=fb.user_id, 
@@ -278,11 +201,9 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
     db.add(new_fb)
     db.commit()
 
-    # 2. Мгновенная генерация A/B Аналитики для телефона
     analysis = None
     garment = db.query(models.Garment).filter(models.Garment.id == fb.garment_id).first()
     
-    # Проверка, что профиль передан как числовой ID
     profile = None
     if fb.user_id and fb.user_id.isdigit():
         profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == int(fb.user_id)).first()
@@ -303,21 +224,19 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
         ground_truth = garment.metrics.get("ground_truth", {})
 
         if theory:
+            model_size = theory.get("model_size", "M")
             cat_type = theory.get("category_type", "top")
             fit_profile = theory.get("fit_profile", "regular")
             elastane = theory.get("elastane_pct", 0)
-            model_size = theory.get("model_size", "M")
 
-            # РАСЧЕТ А (По данным сайта)
             best_t_score = -1
             best_t_size = None
-            for sz in ['S', 'M', 'L', 'XL', 'XXL', '3XL']:
+            for sz in logic.SIZES_ORDER:
                 res = logic.calculate_fit(user, model_size, theory, sz)
                 if res.score > best_t_score:
                     best_t_score = res.score
                     best_t_size = sz
 
-            # РАСЧЕТ Б (По реальным замерам рулеткой)
             best_gt_score = -1
             best_gt_size = None
             if ground_truth:
@@ -332,11 +251,13 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
                         'fit_profile': fit_profile,
                         'elastane_pct': elastane,
                         'height': theory.get('height', 175.0),
+                        'sleeve_type': theory.get('sleeve_type', 'long'),
+                        'leg_type': theory.get('leg_type', 'long'),
                     }
                     if 'chest' in gt_meas: fake_base_data['chest'] = gt_meas['chest'] - base_ease_chest
                     if 'waist' in gt_meas: fake_base_data['waist'] = gt_meas['waist'] - base_ease_waist
                     if 'hips' in gt_meas: fake_base_data['hips'] = gt_meas['hips'] - base_ease_hips
-                    if 'inseam' in gt_meas: fake_base_data['inseam'] = gt_meas['inseam']
+                    if 'inseam' in gt_meas: fake_base_data['g_inseam'] = gt_meas['inseam']
 
                     res = logic.calculate_fit(user, gt_size, fake_base_data, gt_size)
                     if res.score > best_gt_score:
@@ -353,18 +274,12 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
 
     return {"status": "success", "analysis": analysis}
 
-# -----------------------------
-# ADMIN: CLEAR CACHE 
-# -----------------------------
 @app.post("/api/admin/update-db")
 def admin_update_db(db: Session = Depends(database.get_db)):
     invalidate_items_cache()
     count = db.query(models.Garment).count()
     return {"status": "ok", "garments_total": count, "stdout_tail": "Cache cleared manually", "stderr_tail": ""}
 
-# -----------------------------
-# ADMIN: STATS & LIST
-# -----------------------------
 @app.get("/api/admin/stats")
 def admin_stats(db: Session = Depends(database.get_db)):
     return {
@@ -373,8 +288,7 @@ def admin_stats(db: Session = Depends(database.get_db)):
             "profiles": db.query(models.BodyProfile).count(),
             "feedback": db.query(models.Feedback).count(),
             "priors": db.query(models.Prior).count()
-        },
-        "db": {"path": getattr(database, "DB_PATH", None), "size_bytes": os.path.getsize(getattr(database, "DB_PATH", "")) if getattr(database, "DB_PATH", None) and os.path.exists(getattr(database, "DB_PATH", "")) else None}
+        }
     }
 
 @app.get("/api/admin/garments")
@@ -385,9 +299,6 @@ def admin_garments(search: str = Query(""), limit: int = Query(50), db: Session 
     items = query.order_by(models.Garment.id.desc()).limit(limit).all()
     return {"items": [garment_to_dict(g) for g in items]}
 
-# -----------------------------
-# BUILDER API
-# -----------------------------
 @app.get("/api/admin/builder/get")
 def builder_get(sku: str = Query(...), db: Session = Depends(database.get_db)):
     g = db.query(models.Garment).filter(models.Garment.sku == sku.strip()).first()
@@ -441,9 +352,6 @@ def builder_delete(sku: str = Query(...), db: Session = Depends(database.get_db)
         invalidate_items_cache()
     return {"ok": True}
 
-# -----------------------------
-# FRONTEND STATIC + ROUTES
-# -----------------------------
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 

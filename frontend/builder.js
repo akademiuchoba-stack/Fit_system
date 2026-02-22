@@ -19,6 +19,15 @@
     fitProfile: document.getElementById('fit_profile'),
     elastane: document.getElementById('elastane'),
     platform: document.getElementById('platform'),
+    
+    // Новые поля
+    sleeveType: document.getElementById('sleeve_type'),
+    legType: document.getElementById('leg_type'),
+    gLength: document.getElementById('g_length'),
+    gSleeve: document.getElementById('g_sleeve'),
+    gInseam: document.getElementById('g_inseam'),
+    gOutseam: document.getElementById('g_outseam'),
+
     mSize: document.getElementById('m_size'),
     mHeight: document.getElementById('m_height'),
     mChest: document.getElementById('m_chest'),
@@ -108,6 +117,15 @@
     el.catType.value = theory.category_type || 'top';
     el.fitProfile.value = theory.fit_profile || 'regular';
     el.elastane.value = theory.elastane_pct || 0;
+    
+    // Новые поля
+    el.sleeveType.value = theory.sleeve_type || 'long';
+    el.legType.value = theory.leg_type || 'long';
+    el.gLength.value = theory.g_length || '';
+    el.gSleeve.value = theory.g_sleeve || '';
+    el.gInseam.value = theory.g_inseam || '';
+    el.gOutseam.value = theory.g_outseam || '';
+
     el.mSize.value = theory.model_size || '';
     el.mHeight.value = theory.height || '';
     el.mChest.value = theory.chest || '';
@@ -129,7 +147,7 @@
       try {
         const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(sku)}`);
         populateForm(data);
-      } catch (e) { showMsg("Товар не найден", true); }
+      } catch (e) {} // Новый товар
     }
   }
 
@@ -148,6 +166,14 @@
         category_type: el.catType.value,
         fit_profile: el.fitProfile.value,
         elastane_pct: Number(el.elastane.value) || 0,
+        
+        sleeve_type: el.sleeveType.value,
+        leg_type: el.legType.value,
+        g_length: el.gLength.value ? Number(el.gLength.value) : null,
+        g_sleeve: el.gSleeve.value ? Number(el.gSleeve.value) : null,
+        g_inseam: el.gInseam.value ? Number(el.gInseam.value) : null,
+        g_outseam: el.gOutseam.value ? Number(el.gOutseam.value) : null,
+
         model_size: el.mSize.value.trim(),
         height: Number(el.mHeight.value) || null,
         chest: Number(el.mChest.value) || null,
@@ -248,7 +274,6 @@
       const data = await api('/api/feedback', { method: 'POST', body: JSON.stringify(payload) });
       showMsg("Примерка успешно отправлена!");
       
-      // Вывод A/B Аналитики
       if(data.analysis) {
         el.analysisResult.classList.remove('hidden');
         el.resTheory.textContent = data.analysis.theory_size ? `${data.analysis.theory_size} (${data.analysis.theory_score}%)` : 'Нет данных';

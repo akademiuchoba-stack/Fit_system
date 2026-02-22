@@ -31,14 +31,30 @@ DESIGN_EASE = {
     'oversize': {'top': 14.0, 'bottom': 6.0}
 }
 
-GRADE_STEP = 4.0 
+def grade_girth(base_val: float, model_size: str, target_size: str) -> float:
+    """
+    Нелинейное грейдирование обхватов (Сетка O'stin).
+    До L шаг +4 см, после L шаг +8 см.
+    """
+    mapping = {'XS': -8.0, 'S': -4.0, 'M': 0.0, 'L': 4.0, 'XL': 12.0, 'XXL': 20.0, '3XL': 28.0}
+    offset_model = mapping.get(model_size.upper(), 0.0)
+    offset_target = mapping.get(target_size.upper(), 0.0)
+    return base_val + (offset_target - offset_model)
+
+def grade_length(base_val: float, model_size: str, target_size: str) -> float:
+    """Грейдирование длины (рукава, штанины). Обычно растет линейно по 1 см на размер."""
+    try:
+        steps = SIZES_ORDER.index(target_size.upper()) - SIZES_ORDER.index(model_size.upper())
+    except ValueError:
+        steps = 0
+    return base_val + (steps * 1.0)
 
 def calculate_fit(user: Profile, model_size: str, base_data: dict, target_size: str) -> FitResult:
     warnings = []
     details = {}
     score = 100.0
 
-    # 1. Читаем данные модели и изделия
+    # 1. Читаем данные модели
     m_chest = base_data.get('chest', 90.0)
     m_waist = base_data.get('waist', 70.0)
     m_hips = base_data.get('hips', 95.0)
@@ -47,27 +63,27 @@ def calculate_fit(user: Profile, model_size: str, base_data: dict, target_size: 
     fit_profile = base_data.get('fit_profile', 'regular').lower()
     cat_type = base_data.get('category_type', 'top').lower()
     elastane = float(base_data.get('elastane_pct', 0.0))
+    
+    # Фасоны и замеры самой вещи (если есть)
+    sleeve_type = base_data.get('sleeve_type', 'long') # long, short, sleeveless
+    leg_type = base_data.get('leg_type', 'long')       # long, cropped, shorts
+    g_inseam_declared = base_data.get('g_inseam')
 
-    # 2. ИДЕАЛЬНЫЙ ПРИПУСК (задумка дизайнера)
+    # 2. ИДЕАЛЬНЫЙ ПРИПУСК (Точка Ноль)
     ideal_ease = DESIGN_EASE.get(fit_profile, DESIGN_EASE['regular'])
     base_ease_chest = ideal_ease['top'] if cat_type == 'top' else ideal_ease['bottom']
     base_ease_waist = ideal_ease['bottom']
     base_ease_hips = ideal_ease['bottom']
 
-    # 3. ВИРТУАЛЬНАЯ ВЕЩЬ (базовые габариты на модели)
+    # 3. ВИРТУАЛЬНАЯ ВЕЩЬ НА МОДЕЛИ
     g0_chest = m_chest + base_ease_chest
     g0_waist = m_waist + base_ease_waist
     g0_hips = m_hips + base_ease_hips
 
-    # 4. МАСШТАБИРОВАНИЕ (грейдирование под целевой размер)
-    try:
-        steps = SIZES_ORDER.index(target_size.upper()) - SIZES_ORDER.index(model_size.upper())
-    except ValueError:
-        steps = 0 
-
-    gt_chest = g0_chest + (steps * GRADE_STEP)
-    gt_waist = g0_waist + (steps * GRADE_STEP)
-    gt_hips = g0_hips + (steps * GRADE_STEP)
+    # 4. МАСШТАБИРОВАНИЕ НА ЦЕЛЕВОЙ РАЗМЕР (Сетка O'stin)
+    gt_chest = grade_girth(g0_chest, model_size, target_size)
+    gt_waist = grade_girth(g0_waist, model_size, target_size)
+    gt_hips = grade_girth(g0_hips, model_size, target_size)
 
     # 5. ПРИМЕРКА НА ПОЛЬЗОВАТЕЛЯ (фактические припуски)
     user_ease_chest = gt_chest - user.chest
@@ -101,17 +117,12 @@ def calculate_fit(user: Profile, model_size: str, base_data: dict, target_size: 
         eval_zone('Грудь', user.chest, user_ease_chest, base_ease_chest, gt_chest)
         eval_zone('Талия', user.waist, user_ease_waist, base_ease_waist, gt_waist)
         
-        # --- МАТЕМАТИКА: ШТРАФ НА ВЫСТУПАЮЩИЙ ЖИВОТ ---
+        # Штраф на выступающий живот
         if user.waist > user.chest:
-            # Разница радиусов дает нам размер выступа спереди
             belly_protrusion = (user.waist - user.chest) / math.pi
-            base_torso_length = 20.0 # Условное расстояние от груди до талии по прямой
-            
-            # Длина дуги по теореме Пифагора
+            base_torso_length = 20.0
             arc_length = math.sqrt(base_torso_length**2 + belly_protrusion**2)
             length_loss = arc_length - base_torso_length
-            
-            # Ткань с эластаном частично компенсирует натяжение
             stretch_factor = max(0.2, 1.0 - (elastane / 10.0))
             eff_loss = length_loss * stretch_factor
             
@@ -119,47 +130,47 @@ def calculate_fit(user: Profile, model_size: str, base_data: dict, target_size: 
                 penalty = eff_loss * 3.0
                 score -= penalty
                 warnings.append(f"Из-за объема в талии передняя часть изделия может 'подскочить' на ~{eff_loss:.1f}см.")
-                details['Особенность посадки'] = f"Геометрический штраф за натяжение ткани на животе: -{penalty:.1f} баллов."
 
     else:
-        # Для низа грудь игнорируем, считаем талию и БЕДРА
         eval_zone('Талия', user.waist, user_ease_waist, base_ease_waist, gt_waist)
         eval_zone('Бедра', user.hips, user_ease_hips, base_ease_hips, gt_hips)
 
-    # 7. ОЦЕНКА РОСТА И ДЛИНЫ (АНАТОМИЧЕСКИЙ РАСЧЕТ + ШАГОВЫЙ ШОВ)
-    height_diff = user.height - m_height
-    
+    # 7. ОЦЕНКА РОСТА И ДЛИНЫ
     if cat_type == 'bottom':
-        # --- МАТЕМАТИКА: РАСЧЕТ ПО ШАГОВОМУ ШВУ ---
-        # Если в базе нет шагового шва модели, аппроксимируем его как 45% от роста модели
-        m_inseam = base_data.get('inseam', m_height * 0.45)
-        
-        # Масштабируем длину штанин модели в зависимости от размера (примерно +1 см на грейд)
-        gt_inseam = m_inseam + (steps * 1.0)
-        inseam_diff = user.inseam - gt_inseam
-        
-        if inseam_diff > 2.5:
-            details['Длина (Шаговый шов)'] = f"Ваш шаг ({user.inseam:.1f}) больше расчетного ({gt_inseam:.1f}). Штанины будут короче на ~{inseam_diff:.1f}см."
-            score -= inseam_diff * 2.0 # Штраф за подстреленность
-            warnings.append(f"Брюки могут быть коротковаты (-{inseam_diff:.1f}см)")
-        elif inseam_diff < -2.5:
-            details['Длина (Шаговый шов)'] = f"Расчетная длина штанин ({gt_inseam:.1f}) больше вашей ({user.inseam:.1f}). Брюки будут длиннее на ~{abs(inseam_diff):.1f}см."
-            score -= abs(inseam_diff) * 1.0 # Длинные можно подшить (штраф меньше)
+        # Пропускаем штрафы за длину для шорт
+        if leg_type != 'shorts':
+            # Если есть заявленный шаговый шов магазина, берем его. Иначе - формула (45% роста модели).
+            m_inseam = g_inseam_declared if g_inseam_declared else (m_height * 0.45)
+            gt_inseam = grade_length(m_inseam, model_size, target_size)
+            inseam_diff = user.inseam - gt_inseam
+            
+            if inseam_diff > 2.5:
+                details['Длина (Шаг)'] = f"Ваш шаг ({user.inseam:.1f}) > расчетного ({gt_inseam:.1f}). Короче на ~{inseam_diff:.1f}см."
+                score -= inseam_diff * 2.0
+                if leg_type == 'long': warnings.append(f"Брюки могут быть коротковаты (-{inseam_diff:.1f}см)")
+            elif inseam_diff < -2.5:
+                details['Длина (Шаг)'] = f"Расчетная длина ({gt_inseam:.1f}) > вашей. Длиннее на ~{abs(inseam_diff):.1f}см."
+                score -= abs(inseam_diff) * 1.0
+            else:
+                details['Длина (Шаг)'] = f"Длина штанин оптимальна -> [green]ИДЕАЛЬНО[/green]"
         else:
-            details['Длина (Шаговый шов)'] = f"Длина штанин оптимальна (разница {inseam_diff:+.1f}см) -> [green]ИДЕАЛЬНО[/green]"
+            details['Длина'] = "Шорты — ограничений по длине штанин нет."
             
     else:
-        # Для верха оставляем базовый расчет по пропорциям роста (рукава и торс ~35% от роста)
-        if abs(height_diff) > 3.0:
-            len_diff = height_diff * 0.35 
-            if len_diff > 2.5:
-                details['Длина'] = f"Рост больше эталона. Рукава/изделие будут короче на ~{len_diff:.1f}см."
-                score -= len_diff * 1.5
-            elif len_diff < -2.5:
-                details['Длина'] = f"Изделие будет длиннее задуманного на ~{abs(len_diff):.1f}см."
-                score -= abs(len_diff) * 1.0
+        # Для верха пропускаем штрафы, если это футболка (short sleeve) или без рукавов
+        if sleeve_type == 'long':
+            height_diff = user.height - m_height
+            if abs(height_diff) > 3.0:
+                len_diff = height_diff * 0.35 
+                if len_diff > 2.5:
+                    details['Длина'] = f"Рост больше эталона. Рукава/изделие будут короче на ~{len_diff:.1f}см."
+                    score -= len_diff * 1.5
+                elif len_diff < -2.5:
+                    details['Длина'] = f"Изделие будет длиннее задуманного на ~{abs(len_diff):.1f}см."
+                    score -= abs(len_diff) * 1.0
+        else:
+            details['Длина'] = "Короткий рукав/Без рукава — ограничений по росту нет."
 
-    # Финализация
     score = max(0.0, min(100.0, score))
     if score >= 85 and not warnings:
         status, color = "Идеально", "green"

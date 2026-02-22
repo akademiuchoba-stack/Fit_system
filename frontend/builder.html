@@ -72,14 +72,41 @@
             </label>
           </div>
 
+          <div class="grid grid-cols-2 gap-3 mt-2">
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Рукав (Для верха)</span>
+              <select id="sleeve_type" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+                <option value="long">Длинный рукав</option>
+                <option value="short">Короткий рукав (Футболка)</option>
+                <option value="sleeveless">Без рукавов (Майка)</option>
+              </select>
+            </label>
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Штанины (Для низа)</span>
+              <select id="leg_type" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+                <option value="long">Длинные (Брюки/Джинсы)</option>
+                <option value="cropped">Укороченные (Бриджи/7/8)</option>
+                <option value="shorts">Шорты</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="p-4 bg-gray-50 rounded-2xl border border-gray-100 mt-4">
+            <div class="text-[11px] font-extrabold uppercase tracking-widest text-gray-500 mb-3">Заявленные габариты вещи (если указаны на сайте)</div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <input id="g_length" type="number" placeholder="Длина общ. (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="g_sleeve" type="number" placeholder="Длина рукава (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="g_inseam" type="number" placeholder="Шаговый шов (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="g_outseam" type="number" placeholder="Боковой шов (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+            </div>
+          </div>
+
           <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-50 mt-4">
             <div class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-800 mb-3">Тело модели на фото (Для расчета "Точки 0")</div>
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <input id="m_size" placeholder="Размер (M)" class="px-3 py-2 rounded-xl border border-gray-200">
-              <input id="m_height" type="number" placeholder="Рост" class="px-3 py-2 rounded-xl border border-gray-200">
-              <input id="m_chest" type="number" placeholder="Грудь" class="px-3 py-2 rounded-xl border border-gray-200">
-              <input id="m_waist" type="number" placeholder="Талия" class="px-3 py-2 rounded-xl border border-gray-200">
-              <input id="m_hips" type="number" placeholder="Бедра" class="px-3 py-2 rounded-xl border border-gray-200">
+              <input id="m_size" placeholder="Размер (M)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="m_height" type="number" placeholder="Рост" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="m_chest" type="number" placeholder="Грудь" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="m_waist" type="number" placeholder="Талия" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="m_hips" type="number" placeholder="Бедра" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
             </div>
           </div>
         </div>

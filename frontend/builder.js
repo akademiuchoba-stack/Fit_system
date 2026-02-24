@@ -99,6 +99,14 @@
     return data;
   }
 
+  // Парсит числа с запятой ("92,5") и пустые строки
+  function num(v) {
+    const s = String(v ?? '').trim().replace(',', '.');
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
   function getSkuFromUrl() { return new URL(window.location.href).searchParams.get("sku") || ""; }
 
   async function loadProfiles() {
@@ -178,33 +186,39 @@
     if (!sku) return showMsg("SKU обязателен!", true);
 
     const payload = {
-      sku, name: el.name.value.trim(), price: Number(el.price.value) || null,
+      sku, name: el.name.value.trim(), price: num(el.price.value),
       image_url: el.imgFront.value.trim(), image_url_back: el.imgBack.value.trim(), platform: el.platform.value,
       theory: {
         category_type: el.catType.value, fit_profile: el.fitProfile.value,
-        stiffness_class: el.stiffnessClass.value, elastane_pct: Number(el.elastane.value) || 0,
+        stiffness_class: el.stiffnessClass.value, elastane_pct: num(el.elastane.value) || 0,
         sleeve_type: el.sleeveType.value, leg_type: el.legType.value, rise_class: el.riseClass.value,
         
-        g_shoulders: Number(el.gShoulders.value) || null, g_back_width: Number(el.gBackWidth.value) || null,
-        g_chest: Number(el.gChest.value) || null, g_waist_top: Number(el.gWaistTop.value) || null,
-        g_hem_top: Number(el.gHemTop.value) || null, g_bicep: Number(el.gBicep.value) || null,
-        g_sleeve: Number(el.gSleeve.value) || null, g_length: Number(el.gLength.value) || null,
-        g_waist_bot: Number(el.gWaistBot.value) || null, g_belly: Number(el.gBelly.value) || null,
-        g_hips: Number(el.gHips.value) || null, g_thigh: Number(el.gThigh.value) || null,
-        g_knee: Number(el.gKnee.value) || null, g_leg_opening: Number(el.gLegOpening.value) || null,
-        g_front_rise: Number(el.gFrontRise.value) || null, g_back_rise: Number(el.gBackRise.value) || null,
-        g_inseam: Number(el.gInseam.value) || null, g_outseam: Number(el.gOutseam.value) || null,
+        g_shoulders: num(el.gShoulders.value), g_back_width: num(el.gBackWidth.value),
+        g_chest: num(el.gChest.value), g_waist_top: num(el.gWaistTop.value),
+        g_hem_top: num(el.gHemTop.value), g_bicep: num(el.gBicep.value),
+        g_sleeve: num(el.gSleeve.value), g_length: num(el.gLength.value),
+        g_waist_bot: num(el.gWaistBot.value), g_belly: num(el.gBelly.value),
+        g_hips: num(el.gHips.value), g_thigh: num(el.gThigh.value),
+        g_knee: num(el.gKnee.value), g_leg_opening: num(el.gLegOpening.value),
+        g_front_rise: num(el.gFrontRise.value), g_back_rise: num(el.gBackRise.value),
+        g_inseam: num(el.gInseam.value), g_outseam: num(el.gOutseam.value),
 
-        model_size: el.mSize.value.trim(), height: Number(el.mHeight.value) || null,
-        chest: Number(el.mChest.value) || null, waist: Number(el.mWaist.value) || null, hips: Number(el.mHips.value) || null,
+        model_size: el.mSize.value.trim(), height: num(el.mHeight.value),
+        chest: num(el.mChest.value), waist: num(el.mWaist.value), hips: num(el.mHips.value),
       }
     };
 
     try {
-      await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
-      showMsg("Теория успешно сохранена!"); el.skuDisplay.textContent = sku;
-      if (!currentGarment) currentGarment = { id: 999, metrics: {theory: payload.theory} };
-      else currentGarment.metrics.theory = payload.theory;
+      const resp = await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
+      showMsg("Теория успешно сохранена!");
+      // Синхронизируем форму с тем, что реально лежит в базе
+      if (resp && resp.item) {
+        populateForm(resp.item);
+      } else {
+        el.skuDisplay.textContent = sku;
+        if (!currentGarment) currentGarment = { id: 999, metrics: {theory: payload.theory} };
+        else currentGarment.metrics.theory = payload.theory;
+      }
     } catch (e) { showMsg(e.message, true); }
   });
 

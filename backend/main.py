@@ -103,6 +103,18 @@ def create_or_update_profile(payload: models.BodyProfileCreate, db: Session = De
     db.add(p); db.commit(); db.refresh(p)
     return {"status": "created", "id": p.id}
 
+
+@app.put("/api/profiles/{profile_id}")
+def update_profile(profile_id: int, payload: models.BodyProfileCreate, db: Session = Depends(database.get_db)):
+    """Фронтенд (index.js) использует PUT для редактирования профиля."""
+    p = db.query(models.BodyProfile).filter(models.BodyProfile.id == profile_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    for k, v in payload.dict().items():
+        setattr(p, k, v)
+    db.commit()
+    return {"status": "updated", "id": p.id}
+
 @app.delete("/api/profiles/{profile_id}")
 def delete_profile(profile_id: int, db: Session = Depends(database.get_db)):
     p = db.query(models.BodyProfile).filter(models.BodyProfile.id == profile_id).first()
@@ -162,8 +174,16 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
                 "xray": [dataclasses.asdict(r) for r in res_dict["all_results"]]
             })
         except Exception as e:
-            logger.error(f"Calculate error for item {item.sku}: {e}")
-            continue
+            # Не скрываем вещь из выдачи: так проще понять, что именно сломано
+            logger.exception(f"Calculate error for item {item.sku}")
+            results.append({
+                "id": item.id, "sku": item.sku, "name": item.name, "platform": item.platform,
+                "image_url": item.image_url, "price": item.price, "best_size": "N/A",
+                "score": 0.0,
+                "explain": f"❌ Ошибка расчёта: {str(e)[:180]}",
+                "metrics": metrics, "available_sizes": logic.SIZES_ORDER,
+                "xray": []
+            })
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
     return results[:limit]
@@ -297,8 +317,9 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
         new_img_back = payload.get("image_url_back", "").strip()
         if new_img_back: g.image_url_back = new_img_back
         
-        if payload.get("price"):
-            g.price = _coerce_float(payload["price"])
+        # price может быть 0 / "0" — payload.get("price") тогда False. Поэтому проверяем по ключу.
+        if "price" in payload:
+            g.price = _coerce_float(payload.get("price"))
             
         if "in_stock" in payload:
             g.in_stock = bool(payload["in_stock"])
@@ -321,7 +342,9 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
         
         db.commit()
         invalidate_items_cache()
-        return {"ok": True, "action": "created" if created else "updated"}
+        # Возвращаем свежую запись — фронтенду проще синхронизировать форму.
+        db.refresh(g)
+        return {"ok": True, "action": "created" if created else "updated", "item": garment_to_dict(g)}
         
     except Exception as e:
         db.rollback()

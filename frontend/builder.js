@@ -20,13 +20,19 @@
     elastane: document.getElementById('elastane'),
     platform: document.getElementById('platform'),
     
-    // Новые поля
+    // Новые поля Теории
+    stiffnessClass: document.getElementById('stiffness_class'),
     sleeveType: document.getElementById('sleeve_type'),
     legType: document.getElementById('leg_type'),
+    riseClass: document.getElementById('rise_class'),
     gLength: document.getElementById('g_length'),
     gSleeve: document.getElementById('g_sleeve'),
     gInseam: document.getElementById('g_inseam'),
     gOutseam: document.getElementById('g_outseam'),
+    gBackWidth: document.getElementById('g_back_width'),
+    gArmhole: document.getElementById('g_armhole'),
+    gThigh: document.getElementById('g_thigh'),
+    gLegOpening: document.getElementById('g_leg_opening'),
 
     mSize: document.getElementById('m_size'),
     mHeight: document.getElementById('m_height'),
@@ -35,22 +41,27 @@
     mHips: document.getElementById('m_hips'),
     btnSaveTheory: document.getElementById('btn-save-theory'),
 
+    // Новые поля Рулетки
     gtSize: document.getElementById('gt_size'),
     gtChest: document.getElementById('gt_chest'),
     gtWaist: document.getElementById('gt_waist'),
     gtHips: document.getElementById('gt_hips'),
     gtSleeve: document.getElementById('gt_sleeve'),
-    gtInseam: document.getElementById('gt_inseam'),
     gtLength: document.getElementById('gt_length'),
+    gtFrontRise: document.getElementById('gt_front_rise'),
+    gtThigh: document.getElementById('gt_thigh'),
+    gtInseam: document.getElementById('gt_inseam'),
+    gtLegOpening: document.getElementById('gt_leg_opening'),
     btnAddGt: document.getElementById('btn-add-gt'),
     gtList: document.getElementById('gt_list'),
 
+    // Новые поля Фидбэка
     fbProfile: document.getElementById('fb_profile'),
     fbSize: document.getElementById('fb_size'),
     fbPointZero: document.getElementById('fb_point_zero'),
+    fbShoulders: document.getElementById('fb_shoulders'),
     fbChest: document.getElementById('fb_chest'),
-    fbLength: document.getElementById('fb_length'),
-    fbBelly: document.getElementById('fb_belly'),
+    fbHips: document.getElementById('fb_hips'),
     btnSaveFb: document.getElementById('btn-save-fb'),
 
     analysisResult: document.getElementById('analysis-result'),
@@ -118,13 +129,19 @@
     el.fitProfile.value = theory.fit_profile || 'regular';
     el.elastane.value = theory.elastane_pct || 0;
     
-    // Новые поля
+    el.stiffnessClass.value = theory.stiffness_class || 'medium';
     el.sleeveType.value = theory.sleeve_type || 'long';
     el.legType.value = theory.leg_type || 'long';
+    el.riseClass.value = theory.rise_class || 'mid';
+    
     el.gLength.value = theory.g_length || '';
     el.gSleeve.value = theory.g_sleeve || '';
     el.gInseam.value = theory.g_inseam || '';
     el.gOutseam.value = theory.g_outseam || '';
+    el.gBackWidth.value = theory.g_back_width || '';
+    el.gArmhole.value = theory.g_armhole || '';
+    el.gThigh.value = theory.g_thigh || '';
+    el.gLegOpening.value = theory.g_leg_opening || '';
 
     el.mSize.value = theory.model_size || '';
     el.mHeight.value = theory.height || '';
@@ -147,7 +164,7 @@
       try {
         const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(sku)}`);
         populateForm(data);
-      } catch (e) {} // Новый товар
+      } catch (e) {}
     }
   }
 
@@ -165,14 +182,21 @@
       theory: {
         category_type: el.catType.value,
         fit_profile: el.fitProfile.value,
+        stiffness_class: el.stiffnessClass.value,
         elastane_pct: Number(el.elastane.value) || 0,
         
         sleeve_type: el.sleeveType.value,
         leg_type: el.legType.value,
+        rise_class: el.riseClass.value,
+        
         g_length: el.gLength.value ? Number(el.gLength.value) : null,
         g_sleeve: el.gSleeve.value ? Number(el.gSleeve.value) : null,
         g_inseam: el.gInseam.value ? Number(el.gInseam.value) : null,
         g_outseam: el.gOutseam.value ? Number(el.gOutseam.value) : null,
+        g_back_width: el.gBackWidth.value ? Number(el.gBackWidth.value) : null,
+        g_armhole: el.gArmhole.value ? Number(el.gArmhole.value) : null,
+        g_thigh: el.gThigh.value ? Number(el.gThigh.value) : null,
+        g_leg_opening: el.gLegOpening.value ? Number(el.gLegOpening.value) : null,
 
         model_size: el.mSize.value.trim(),
         height: Number(el.mHeight.value) || null,
@@ -199,7 +223,7 @@
     el.gtList.innerHTML = sizes.map(size => {
       const d = groundTruthData[size];
       return `<div class="p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm flex justify-between items-center">
-        <div><strong class="text-indigo-600">Размер ${size}</strong>: ${JSON.stringify(d).replace(/[{""}]/g,'')}</div>
+        <div class="truncate"><strong class="text-indigo-600">Размер ${size}</strong>: ${JSON.stringify(d).replace(/[{""}]/g,'')}</div>
         <button onclick="deleteGt('${size}')" class="text-red-500 font-bold text-xs ml-2">X</button>
       </div>`;
     }).join('');
@@ -223,14 +247,17 @@
     if (el.gtWaist.value) m.waist = Number(el.gtWaist.value);
     if (el.gtHips.value) m.hips = Number(el.gtHips.value);
     if (el.gtSleeve.value) m.sleeve = Number(el.gtSleeve.value);
-    if (el.gtInseam.value) m.inseam = Number(el.gtInseam.value);
     if (el.gtLength.value) m.length = Number(el.gtLength.value);
+    if (el.gtFrontRise.value) m.front_rise = Number(el.gtFrontRise.value);
+    if (el.gtThigh.value) m.thigh = Number(el.gtThigh.value);
+    if (el.gtInseam.value) m.inseam = Number(el.gtInseam.value);
+    if (el.gtLegOpening.value) m.leg_opening = Number(el.gtLegOpening.value);
 
     if (Object.keys(m).length === 0) return showMsg("Введи хотя бы один замер!", true);
 
     groundTruthData[size] = m;
     
-    [el.gtSize, el.gtChest, el.gtWaist, el.gtHips, el.gtSleeve, el.gtInseam, el.gtLength].forEach(i => i.value = '');
+    [el.gtSize, el.gtChest, el.gtWaist, el.gtHips, el.gtSleeve, el.gtLength, el.gtFrontRise, el.gtThigh, el.gtInseam, el.gtLegOpening].forEach(i => i.value = '');
     
     renderGtList();
     await saveGroundTruthOnly();
@@ -248,7 +275,7 @@
     } catch (e) { showMsg(e.message, true); }
   }
 
- el.btnSaveFb.addEventListener('click', async () => {
+  el.btnSaveFb.addEventListener('click', async () => {
     if (!currentGarment || !currentGarment.id) return showMsg("Сначала сохрани товар (Теорию)!", true);
     
     const userId = el.fbProfile.value;
@@ -258,9 +285,9 @@
     if (!sizeSelected) return showMsg("Укажи размер, который мерял!", true);
 
     const matrix = {};
-    if (el.fbChest.value) matrix.width = el.fbChest.value;
-    if (el.fbLength.value) matrix.length = el.fbLength.value;
-    if (el.fbBelly.value) matrix.belly = el.fbBelly.value;
+    if (el.fbShoulders.value) matrix.shoulders = el.fbShoulders.value;
+    if (el.fbChest.value) matrix.chest = el.fbChest.value;
+    if (el.fbHips.value) matrix.hips = el.fbHips.value;
 
     const payload = {
       garment_id: currentGarment.id,
@@ -290,7 +317,6 @@
             el.resVerdict.textContent = "Недостаточно данных для сравнения.";
         }
 
-        // Рендер рентгена в Builder
         let xrayHtml = `<div class="mt-4 border-t border-indigo-200/50 pt-4"><h4 class="text-[11px] uppercase tracking-widest text-indigo-500 font-extrabold mb-3">Рентген по данным сайта (Теория):</h4><div class="space-y-3">`;
         (data.analysis.xray || []).forEach(sz => {
             xrayHtml += `
@@ -301,7 +327,6 @@
         });
         xrayHtml += `</div></div>`;
         
-        // Добавляем рентген под вердикт
         let existingXray = document.getElementById('builder-xray');
         if (existingXray) existingXray.remove();
         

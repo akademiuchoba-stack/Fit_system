@@ -191,11 +191,13 @@
       }
     }
 
-    loadProfileIntoForm(p){
+   loadProfileIntoForm(p){
       this.state.editProfileId = p.id;
       if(this.el.formTitle) this.el.formTitle.textContent = `Редактирование: ${p.name}`;
       const f = this.el.form;
       if(!f) return;
+      
+      // Базовые данные
       f.name.value = p.name ?? '';
       f.gender.value = p.gender ?? 'male';
       f.height.value = p.height ?? '';
@@ -207,6 +209,30 @@
       f.leg_length.value = p.leg_length ?? '';
       f.inseam.value = p.inseam ?? '';
       f.id.value = p.id ?? '';
+
+      // Проблемные зоны
+      const pz = p.problem_zones || [];
+      if(f.pz_shoulders) f.pz_shoulders.checked = pz.includes('shoulders');
+      if(f.pz_belly) f.pz_belly.checked = pz.includes('belly');
+      if(f.pz_hips) f.pz_hips.checked = pz.includes('hips');
+      if(f.pz_arms) f.pz_arms.checked = pz.includes('arms');
+
+      // Эталонные вещи (Comfort_C)
+      const c = p.comfort_C || {};
+      if(c.top) {
+          f.c_top_chest.value = c.top.chest ?? '';
+          f.c_top_sleeve.value = c.top.sleeve ?? '';
+      } else {
+          f.c_top_chest.value = ''; f.c_top_sleeve.value = '';
+      }
+      if(c.bottom) {
+          f.c_bot_waist.value = c.bottom.waist_bottom ?? '';
+          f.c_bot_hips.value = c.bottom.hips ?? '';
+          f.c_bot_inseam.value = c.bottom.inseam ?? '';
+      } else {
+          f.c_bot_waist.value = ''; f.c_bot_hips.value = ''; f.c_bot_inseam.value = '';
+      }
+
       show(this.el.btnCancelEdit);
     }
 
@@ -223,6 +249,35 @@
     async saveProfileFromForm(){
       const f = this.el.form;
       if(!f) return;
+      
+      // Собираем проблемные зоны
+      const problem_zones = [];
+      if(f.pz_shoulders?.checked) problem_zones.push('shoulders');
+      if(f.pz_belly?.checked) problem_zones.push('belly');
+      if(f.pz_hips?.checked) problem_zones.push('hips');
+      if(f.pz_arms?.checked) problem_zones.push('arms');
+
+      // Собираем Comfort_C (уже в flat_half, так как меряли на столе)
+      const comfort_C = {};
+      
+      const tChest = Number(f.c_top_chest?.value);
+      const tSleeve = Number(f.c_top_sleeve?.value);
+      if(tChest || tSleeve) {
+          comfort_C.top = {};
+          if(tChest) comfort_C.top.chest = tChest;
+          if(tSleeve) comfort_C.top.sleeve = tSleeve;
+      }
+
+      const bWaist = Number(f.c_bot_waist?.value);
+      const bHips = Number(f.c_bot_hips?.value);
+      const bInseam = Number(f.c_bot_inseam?.value);
+      if(bWaist || bHips || bInseam) {
+          comfort_C.bottom = {};
+          if(bWaist) comfort_C.bottom.waist_bottom = bWaist;
+          if(bHips) comfort_C.bottom.hips = bHips;
+          if(bInseam) comfort_C.bottom.inseam = bInseam;
+      }
+
       const payload = {
         name: f.name.value.trim(),
         gender: f.gender.value,
@@ -234,6 +289,8 @@
         arm_length: Number(f.arm_length.value || 0),
         leg_length: Number(f.leg_length.value || 0),
         inseam: Number(f.inseam.value || 0),
+        problem_zones: problem_zones,
+        comfort_C: Object.keys(comfort_C).length > 0 ? comfort_C : null
       };
 
       if(!payload.name) throw new Error('Имя профиля обязательно');

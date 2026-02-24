@@ -60,19 +60,19 @@
                 <option value="oversize">Oversize</option>
               </select>
             </label>
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Ткань (Жесткость)</span>
+              <select id="stiffness_class" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-indigo-700 font-bold">
+                <option value="medium">Средняя (Medium)</option>
+                <option value="soft">Мягкая (Soft)</option>
+                <option value="stiff">Жесткая (Stiff)</option>
+              </select>
+            </label>
             <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Эластан (%)</span>
               <input id="elastane" type="number" value="0" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-center">
             </label>
-            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Платформа</span>
-              <select id="platform" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
-                <option value="ostin">O'stin</option>
-                <option value="lamoda">Lamoda</option>
-                <option value="manual">Manual</option>
-              </select>
-            </label>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 mt-2">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
             <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Рукав (Для верха)</span>
               <select id="sleeve_type" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
                 <option value="long">Длинный рукав</option>
@@ -83,8 +83,15 @@
             <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Штанины (Для низа)</span>
               <select id="leg_type" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
                 <option value="long">Длинные (Брюки/Джинсы)</option>
-                <option value="cropped">Укороченные (Бриджи/7/8)</option>
+                <option value="cropped">Укороченные (Бриджи)</option>
                 <option value="shorts">Шорты</option>
+              </select>
+            </label>
+            <label class="block"><span class="text-[11px] font-extrabold uppercase text-gray-400 pl-2">Посадка (Rise)</span>
+              <select id="rise_class" class="w-full mt-1 px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 text-indigo-700 font-bold">
+                <option value="mid">Средняя (Mid Rise)</option>
+                <option value="high">Высокая (High Rise)</option>
+                <option value="low">Низкая (Low Rise)</option>
               </select>
             </label>
           </div>
@@ -92,27 +99,31 @@
           <div class="p-4 bg-gray-50 rounded-2xl border border-gray-100 mt-4">
             <div class="text-[11px] font-extrabold uppercase tracking-widest text-gray-500 mb-3">Заявленные габариты вещи (если указаны на сайте)</div>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <input id="g_length" type="number" placeholder="Длина общ. (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="g_sleeve" type="number" placeholder="Длина рукава (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="g_inseam" type="number" placeholder="Шаговый шов (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="g_outseam" type="number" placeholder="Боковой шов (см)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="g_length" type="number" placeholder="Длина общ." class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_sleeve" type="number" placeholder="Рукав" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_inseam" type="number" placeholder="Шаговый шов" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_outseam" type="number" placeholder="Боковой шов" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_back_width" type="number" placeholder="Ширина спины" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_armhole" type="number" placeholder="Глубина проймы" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_thigh" type="number" placeholder="Ширина бедра" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="g_leg_opening" type="number" placeholder="Ширина низа" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
             </div>
           </div>
 
           <div class="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-50 mt-4">
             <div class="text-[11px] font-extrabold uppercase tracking-widest text-indigo-800 mb-3">Тело модели на фото (Для расчета "Точки 0")</div>
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              <input id="m_size" placeholder="Размер (M)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="m_height" type="number" placeholder="Рост" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="m_chest" type="number" placeholder="Грудь" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="m_waist" type="number" placeholder="Талия" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
-              <input id="m_hips" type="number" placeholder="Бедра" class="px-3 py-2 rounded-xl border border-gray-200 bg-white">
+              <input id="m_size" placeholder="Размер (M)" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="m_height" type="number" placeholder="Рост" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="m_chest" type="number" placeholder="Грудь" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="m_waist" type="number" placeholder="Талия" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
+              <input id="m_hips" type="number" placeholder="Бедра" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm">
             </div>
           </div>
         </div>
 
         <button id="btn-save-theory" class="w-full py-4 rounded-2xl bg-gray-900 text-white font-black text-sm uppercase tracking-widest hover:bg-indigo-600 transition shadow-lg">
-          Сохранить в базу
+          Сохранить Теорию
         </button>
       </div>
     </div>
@@ -126,18 +137,23 @@
             <div class="text-[10px] uppercase font-bold text-gray-400">Ground Truth</div>
           </div>
           
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <input id="gt_size" placeholder="Размер (напр. L)*" class="col-span-2 sm:col-span-3 px-4 py-3 rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 font-bold focus:ring-2 outline-none text-center">
-            <input id="gt_chest" type="number" placeholder="Грудь (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
-            <input id="gt_waist" type="number" placeholder="Талия (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
-            <input id="gt_hips" type="number" placeholder="Бедра (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
-            <input id="gt_sleeve" type="number" placeholder="Рукав (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
-            <input id="gt_inseam" type="number" placeholder="Шаг. шов (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
-            <input id="gt_length" type="number" placeholder="Длина общ. (см)" class="px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50">
+          <input id="gt_size" placeholder="Размер (напр. L)*" class="w-full px-4 py-3 rounded-2xl border-2 border-indigo-100 bg-indigo-50/30 font-bold focus:ring-2 outline-none text-center">
+          
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+            <input id="gt_chest" type="number" placeholder="Грудь (ширина)" class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+            <input id="gt_waist" type="number" placeholder="Талия/Пояс (ширина)" class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+            <input id="gt_hips" type="number" placeholder="Бедра (ширина)" class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+            <input id="gt_sleeve" type="number" placeholder="Рукав (длина)" class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+            <input id="gt_length" type="number" placeholder="Длина общ." class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+            
+            <input id="gt_front_rise" type="number" placeholder="Посадка спереди" class="px-3 py-2 rounded-xl border border-gray-200 bg-indigo-50 text-sm">
+            <input id="gt_thigh" type="number" placeholder="Бедро ноги (ширина)" class="px-3 py-2 rounded-xl border border-gray-200 bg-indigo-50 text-sm">
+            <input id="gt_inseam" type="number" placeholder="Шаг. шов" class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+            <input id="gt_leg_opening" type="number" placeholder="Ширина низа" class="px-3 py-2 rounded-xl border border-gray-200 bg-indigo-50 text-sm">
           </div>
           
           <button id="btn-add-gt" class="w-full py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-600 font-bold text-sm uppercase tracking-wider hover:bg-gray-50 transition">
-            + Добавить замер в матрицу
+            + Сохранить замер в матрицу
           </button>
           
           <div id="gt_list" class="space-y-2 mt-2"></div>
@@ -149,35 +165,36 @@
           </div>
 
           <select id="fb_profile" class="w-full px-4 py-3 rounded-2xl border-2 border-gray-200 bg-white font-bold"></select>
-          
-          <div class="grid grid-cols-2 gap-3">
-             <input id="fb_size" placeholder="Какой размер меряли? (L)*" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 font-bold">
-          </div>
+          <input id="fb_size" placeholder="Какой размер надет? (L)*" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 font-bold">
 
           <label class="flex items-center gap-3 p-4 rounded-2xl border-2 border-green-100 bg-green-50/50 cursor-pointer">
             <input id="fb_point_zero" type="checkbox" class="w-6 h-6 rounded text-green-600 focus:ring-green-500">
-            <span class="font-black text-green-800">ЭТО МОЯ "ТОЧКА НОЛЬ" (Идеальная посадка)</span>
+            <span class="font-black text-green-800">ЭТО МОЯ "ТОЧКА НОЛЬ" (Идеал)</span>
           </label>
 
           <div class="space-y-3 mt-4">
-            <div class="text-[11px] font-extrabold uppercase text-gray-500">Матрица ощущений</div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div class="text-[11px] font-extrabold uppercase text-gray-500">Матрица ощущений (IP 2.0)</div>
+            <div class="grid grid-cols-1 gap-2">
+              <select id="fb_shoulders" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+                <option value="">Плечи / Спина</option>
+                <option value="ok">Сидит идеально</option>
+                <option value="pulls_slight">Слегка тянет</option>
+                <option value="tight_strong">Сильно жмет / Сковывает</option>
+                <option value="loose_slight">Слегка свободно</option>
+              </select>
               <select id="fb_chest" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
-                <option value="">Ширина (Грудь/Бедра)</option>
-                <option value="tight">Жмет / Тесно</option>
-                <option value="perfect">Идеально</option>
-                <option value="loose">Свободно / Болтается</option>
+                <option value="">Грудь / Живот (Ширина)</option>
+                <option value="ok">Сидит идеально</option>
+                <option value="pulls_slight">Слегка тянет пуговицы</option>
+                <option value="tight_strong">Сильно жмет</option>
+                <option value="loose_strong">Болтается мешком</option>
               </select>
-              <select id="fb_length" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
-                <option value="">Длина (Рукав/Штанины)</option>
-                <option value="short">Коротко (Подстрел)</option>
-                <option value="perfect">Идеально</option>
-                <option value="long">Длинно (Нужно подшивать)</option>
-              </select>
-              <select id="fb_belly" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
-                <option value="">Живот (Посадка спереди)</option>
-                <option value="rises">Подскакивает (Коротко спереди)</option>
-                <option value="perfect">Лежит ровно</option>
+              <select id="fb_hips" class="px-3 py-3 rounded-xl border border-gray-200 bg-gray-50 text-sm">
+                <option value="">Бедра / Пах (Посадка)</option>
+                <option value="ok">Сидит идеально</option>
+                <option value="rubs_medium">Натирает / Давит в паху</option>
+                <option value="pulls_slight">Тянет на бедрах</option>
+                <option value="loose_slight">Слегка свободно</option>
               </select>
             </div>
           </div>

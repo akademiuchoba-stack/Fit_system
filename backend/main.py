@@ -189,6 +189,7 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
             inseam=getattr(profile, 'inseam', 0.0) or 0.0, length_dress=getattr(profile, 'length_dress', 0.0) or 0.0,
             problem_zones=getattr(profile, 'problem_zones', []) or [], comfort_C=getattr(profile, 'comfort_C', {}) or {}
         )
+
         theory = garment.metrics.get("theory", {})
         ground_truth = garment.metrics.get("ground_truth", {})
 
@@ -266,56 +267,67 @@ def builder_get(sku: str = Query(...), db: Session = Depends(database.get_db)):
 def builder_list(limit: int = Query(20), db: Session = Depends(database.get_db)):
     return {"items": [garment_to_dict(g) for g in db.query(models.Garment).order_by(models.Garment.id.desc()).limit(limit).all()]}
 
-# === ЖЕЛЕЗОБЕТОННОЕ СОХРАНЕНИЕ: НЕ ЗАТИРАЕТ СТАРЫЕ ДАННЫЕ ===
+# ========================================================
+# БРОНИРОВАННОЕ СОХРАНЕНИЕ (Убивает 500 ошибку на корню)
+# ========================================================
 @app.post("/api/admin/builder/upsert")
 def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(database.get_db)):
-    sku = (payload.get("sku") or "").strip()
-    if not sku: raise HTTPException(status_code=400, detail="sku is required")
+    try:
+        sku = (payload.get("sku") or "").strip()
+        if not sku: raise HTTPException(status_code=400, detail="Артикул (SKU) обязателен")
 
-    g = db.query(models.Garment).filter(models.Garment.sku == sku).first()
-    created = False
-    if not g:
-        g = models.Garment(sku=sku)
-        db.add(g)
-        created = True
+        g = db.query(models.Garment).filter(models.Garment.sku == sku).first()
+        created = False
+        if not g:
+            g = models.Garment(sku=sku)
+            db.add(g)
+            created = True
 
-    # Обновляем текстовые поля, ТОЛЬКО если с фронта пришла непустая строка.
-    new_name = payload.get("name", "").strip()
-    if new_name:
-        g.name = new_name
-    elif not g.name:
-        g.name = sku
+        new_name = payload.get("name", "").strip()
+        if new_name: g.name = new_name
+        elif not g.name: g.name = sku
+            
+        new_platform = payload.get("platform", "").strip()
+        if new_platform: g.platform = new_platform
+        elif not g.platform: g.platform = "manual"
+            
+        new_img = payload.get("image_url", "").strip()
+        if new_img: g.image_url = new_img
+            
+        new_img_back = payload.get("image_url_back", "").strip()
+        if new_img_back: g.image_url_back = new_img_back
         
-    new_platform = payload.get("platform", "").strip()
-    if new_platform:
-        g.platform = new_platform
-    elif not g.platform:
-        g.platform = "manual"
-        
-    new_img = payload.get("image_url", "").strip()
-    if new_img: g.image_url = new_img
-        
-    new_img_back = payload.get("image_url_back", "").strip()
-    if new_img_back: g.image_url_back = new_img_back
-    
-    if payload.get("price"):
-        g.price = _coerce_float(payload["price"])
-        
-    if "in_stock" in payload:
-        g.in_stock = bool(payload["in_stock"])
+        if payload.get("price"):
+            g.price = _coerce_float(payload["price"])
+            
+        if "in_stock" in payload:
+            g.in_stock = bool(payload["in_stock"])
 
-    current_metrics = g.metrics or {}
-    new_metrics = dict(current_metrics) 
-    
-    if "theory" in payload: new_metrics["theory"] = payload["theory"]
-    if "ground_truth" in payload: new_metrics["ground_truth"] = payload["ground_truth"]
+        # Создаем совершенно новый объект словаря, чтобы SQLAlchemy точно увидел изменения
+        current_metrics = g.metrics or {}
+        new_metrics = dict(current_metrics) 
+        
+        if "theory" in payload: new_metrics["theory"] = payload["theory"]
+        if "ground_truth" in payload: new_metrics["ground_truth"] = payload["ground_truth"]
 
-    g.metrics = new_metrics
-    flag_modified(g, "metrics") 
-    
-    db.commit()
-    invalidate_items_cache()
-    return {"ok": True, "action": "created" if created else "updated"}
+        g.metrics = new_metrics
+        
+        # Защита от бага SQLAlchemy с новыми объектами
+        if not created:
+            try:
+                flag_modified(g, "metrics")
+            except Exception:
+                pass
+        
+        db.commit()
+        invalidate_items_cache()
+        return {"ok": True, "action": "created" if created else "updated"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Критическая ошибка при сохранении Builder'а: {e}")
+        # Возвращаем понятную красную ошибку на фронтенд
+        raise HTTPException(status_code=500, detail=f"Ошибка сервера: {str(e)}")
 
 @app.delete("/api/admin/builder/delete")
 def builder_delete(sku: str = Query(...), db: Session = Depends(database.get_db)):

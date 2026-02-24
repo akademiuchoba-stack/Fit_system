@@ -174,7 +174,6 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
                 "xray": [dataclasses.asdict(r) for r in res_dict["all_results"]]
             })
         except Exception as e:
-            # Не скрываем вещь из выдачи: так проще понять, что именно сломано
             logger.exception(f"Calculate error for item {item.sku}")
             results.append({
                 "id": item.id, "sku": item.sku, "name": item.name, "platform": item.platform,
@@ -303,13 +302,19 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
             db.add(g)
             created = True
 
-        new_name = payload.get("name", "").strip()
-        if new_name: g.name = new_name
-        elif not g.name: g.name = sku
-            
-        new_platform = payload.get("platform", "").strip()
-        if new_platform: g.platform = new_platform
-        elif not g.platform: g.platform = "manual"
+        new_name = (payload.get("name") or "").strip()
+        if new_name:
+            g.name = new_name
+
+        new_platform = (payload.get("platform") or "").strip()
+        if new_platform:
+            g.platform = new_platform
+
+        # ✅ Если пришёл только SKU (например с телефона) — всё равно создаём нормальную карточку
+        if not (g.name or "").strip():
+            g.name = sku
+        if not (g.platform or "").strip():
+            g.platform = "manual"
             
         new_img = payload.get("image_url", "").strip()
         if new_img: g.image_url = new_img
@@ -342,8 +347,8 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
         
         db.commit()
         invalidate_items_cache()
-        # Возвращаем свежую запись — фронтенду проще синхронизировать форму.
         db.refresh(g)
+        # Возвращаем свежую запись — фронтенду проще синхронизировать форму.
         return {"ok": True, "action": "created" if created else "updated", "item": garment_to_dict(g)}
         
     except Exception as e:

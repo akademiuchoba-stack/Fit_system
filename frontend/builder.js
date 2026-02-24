@@ -211,8 +211,7 @@
     try {
       const resp = await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
       showMsg("Теория успешно сохранена!");
-      // Синхронизируем форму с тем, что реально лежит в базе
-      if (resp && resp.item) {
+      if (resp?.item) {
         populateForm(resp.item);
       } else {
         el.skuDisplay.textContent = sku;
@@ -245,7 +244,10 @@
     if (!size) return showMsg("Укажи размер (Например L)!", true);
 
     const m = {};
-    const extract = (id, key) => { const val = Number(document.getElementById(id).value); if(val) m[key] = val; };
+    const extract = (id, key) => {
+      const val = num(document.getElementById(id).value);
+      if (val !== null) m[key] = val;
+    };
     
     extract('gt_shoulders', 'shoulders'); extract('gt_back_width', 'back_width');
     extract('gt_chest', 'chest'); extract('gt_waist_top', 'waist_top'); extract('gt_hem_top', 'hem_top');
@@ -267,8 +269,23 @@
 
   async function saveGroundTruthOnly() {
     const sku = el.sku.value.trim(); if (!sku) return;
-    try { await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify({ sku: sku, ground_truth: groundTruthData }) }); showMsg("Замер добавлен!"); } 
-    catch (e) { showMsg(e.message, true); }
+    try {
+      // ✅ ВАЖНО: отправляем базовые поля тоже, иначе в базе будет "SKU-only" карточка
+      const payload = {
+        sku,
+        name: (el.name.value || '').trim(),
+        platform: el.platform.value || 'manual',
+        price: num(el.price.value),
+        image_url: (el.imgFront.value || '').trim(),
+        image_url_back: (el.imgBack.value || '').trim(),
+        ground_truth: groundTruthData
+      };
+      const resp = await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
+      showMsg("Замер добавлен!");
+      if (resp?.item) populateForm(resp.item);
+    } catch (e) {
+      showMsg(e.message, true);
+    }
   }
 
   el.btnSaveFb.addEventListener('click', async () => {

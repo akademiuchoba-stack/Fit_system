@@ -333,60 +333,71 @@
       }
     }
 
-    openModal(r){
+openModal(r){
       this.state.currentCard = r;
       const sku = r?.sku || '';
       const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
 
       if(this.el.modalTitle) this.el.modalTitle.textContent = r?.name || r?.sku || '—';
-      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${sku} • Размер ${r?.best_size || '—'}`;
+      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${sku} • Рекомендация: ${r?.best_size || '—'}`;
       if(this.el.modalImage) this.el.modalImage.src = r?.image_url || PLACEHOLDER_IMG;
 
       const scoreVal = Number(r?.score ?? 0);
       if(this.el.modalScore) this.el.modalScore.textContent = Math.round(scoreVal) + '%';
 
       if(this.el.modalExplain) {
-        const parts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
-        let html = '';
-        parts.forEach((p, idx) => {
-            let cleanText = esc(p)
-                .replace(/\[green\](.*?)\[\/green\]/g, '<span class="text-green-600 font-bold">$1</span>')
-                .replace(/\[yellow\](.*?)\[\/yellow\]/g, '<span class="text-yellow-600 font-bold">$1</span>')
-                .replace(/\[red\](.*?)\[\/red\]/g, '<span class="text-red-600 font-bold">$1</span>')
-                .replace(/\[cyan\](.*?)\[\/cyan\]/g, '<span class="text-cyan-600 font-bold">$1</span>')
-                .replace(/\[magenta\](.*?)\[\/magenta\]/g, '<span class="text-purple-600 font-bold">$1</span>');
-
-            if (idx === 0) {
-                html += `<div class="font-black text-lg mb-3 pb-3 border-b border-gray-100">${cleanText}</div>`;
-            } else {
-                html += `<div class="flex items-start gap-2 mb-2"><span class="text-gray-400 mt-0.5">•</span><span>${cleanText}</span></div>`;
-            }
-        });
-        
-        html += `
-          <div class="mt-5 pt-4 border-t border-gray-100">
-            <a href="${builderUrl}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition">
-              ✎ Редактировать в Builder
+        let html = `
+          <div class="mt-2 pt-4 border-t border-gray-100">
+            <a href="${builderUrl}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
+              ✎ Настроить в Builder (X-RAY)
             </a>
           </div>
         `;
         this.el.modalExplain.innerHTML = html;
       }
 
-      const m = r?.metrics || {};
-      const rows = Object.entries(m).map(([k,v])=> {
-        let valStr = typeof v==='number' ? fmt(v) : JSON.stringify(v);
-        if (typeof v === 'object' && v !== null) {
-            valStr = Object.entries(v).map(([subK, subV]) => `${subK}: ${subV}`).join(', ');
-        }
-        return `
-        <div class="flex items-start justify-between gap-3 border-b last:border-0 border-gray-50 py-2">
-          <div class="text-xs text-gray-500 w-1/3 truncate">${esc(k)}</div>
-          <div class="text-xs font-bold text-right w-2/3 break-words">${esc(valStr)}</div>
+      // --- ПАНЕЛЬ РЕНТГЕНА ---
+      let xrayHtml = `
+        <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-2">Существующие размеры (в наличии):</div>
+        <div class="flex gap-2 flex-wrap mb-6">
+            ${(r.available_sizes || []).map(sz => `<span class="px-3 py-1 bg-gray-100 text-gray-800 font-black text-sm rounded-lg">${sz}</span>`).join('')}
         </div>
-      `}).join('');
+        
+        <div class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-3">Детальный рентген посадки (Все размеры)</div>
+        <div class="space-y-4">
+      `;
       
-      if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = rows || `<div class="text-sm text-gray-500">Нет данных о метриках</div>`;
+      (r.xray || []).forEach(sz => {
+          let isRec = sz.size_label === r.best_size;
+          let colorClass = 'border-gray-200 bg-white';
+          if (sz.hard_fit === 'FAIL') colorClass = 'border-red-200 bg-red-50 text-red-900 opacity-70';
+          else if (isRec) colorClass = 'border-green-300 bg-green-50 shadow-md';
+          
+          let zonesHtml = sz.xray_zones.map(z => `
+              <div class="flex flex-col sm:flex-row sm:justify-between text-[11px] py-1 border-b border-gray-100/50 last:border-0">
+                  <span class="sm:w-1/3 truncate font-bold text-gray-700">${z.zone_name}</span>
+                  <span class="sm:w-1/3 text-gray-500">Цель: ${fmt(z.target_val)} → Вещь: ${fmt(z.garment_val)}</span>
+                  <span class="sm:w-1/3 sm:text-right font-bold ${z.penalty > 0 ? 'text-red-500' : 'text-green-600'}">${z.status} (${fmt(z.delta_eff)}см)</span>
+              </div>
+          `).join('');
+
+          xrayHtml += `
+              <div class="rounded-xl border ${colorClass} p-3 transition-all">
+                  <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-100/30">
+                      <div class="font-black text-sm flex items-center gap-2">
+                          Размер ${sz.size_label} 
+                          ${!sz.is_available ? '<span class="text-[9px] uppercase tracking-widest bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">Теория</span>' : ''}
+                      </div>
+                      <div class="font-bold text-xs ${sz.hard_fit === 'FAIL' ? 'text-red-600' : ''}">${Math.round(sz.score)}% - ${sz.global_status}</div>
+                  </div>
+                  <div>${zonesHtml}</div>
+                  ${sz.warnings.length ? `<div class="mt-2 text-[10px] text-red-600 font-bold bg-white p-2 rounded border border-red-100">${sz.warnings.join('<br>')}</div>` : ''}
+              </div>
+          `;
+      });
+      xrayHtml += `</div>`;
+
+      if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = xrayHtml;
 
       show(this.el.modal);
     }

@@ -248,7 +248,7 @@
     } catch (e) { showMsg(e.message, true); }
   }
 
-  el.btnSaveFb.addEventListener('click', async () => {
+ el.btnSaveFb.addEventListener('click', async () => {
     if (!currentGarment || !currentGarment.id) return showMsg("Сначала сохрани товар (Теорию)!", true);
     
     const userId = el.fbProfile.value;
@@ -289,6 +289,26 @@
             el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-gray-100 text-gray-800";
             el.resVerdict.textContent = "Недостаточно данных для сравнения.";
         }
+
+        // Рендер рентгена в Builder
+        let xrayHtml = `<div class="mt-4 border-t border-indigo-200/50 pt-4"><h4 class="text-[11px] uppercase tracking-widest text-indigo-500 font-extrabold mb-3">Рентген по данным сайта (Теория):</h4><div class="space-y-3">`;
+        (data.analysis.xray || []).forEach(sz => {
+            xrayHtml += `
+            <div class="bg-white p-2 rounded-xl border ${sz.hard_fit === 'FAIL' ? 'border-red-200' : 'border-indigo-100'} text-xs">
+                <div class="font-black mb-1">Размер ${sz.size_label} <span class="font-normal text-gray-500 float-right">${Math.round(sz.score)}%</span></div>
+                ${sz.xray_zones.map(z => `<div class="flex justify-between"><span class="text-gray-500">${z.zone_name}</span> <span class="${z.penalty > 0 ? 'text-red-500' : 'text-green-600'}">${z.status}</span></div>`).join('')}
+            </div>`;
+        });
+        xrayHtml += `</div></div>`;
+        
+        // Добавляем рентген под вердикт
+        let existingXray = document.getElementById('builder-xray');
+        if (existingXray) existingXray.remove();
+        
+        let xrayContainer = document.createElement('div');
+        xrayContainer.id = 'builder-xray';
+        xrayContainer.innerHTML = xrayHtml;
+        el.resVerdict.parentNode.appendChild(xrayContainer);
       }
 
     } catch (e) { showMsg(e.message, true); }

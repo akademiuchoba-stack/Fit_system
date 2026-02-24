@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import subprocess
+import dataclasses
 from pathlib import Path
 from time import time
 from typing import Any, Dict, Optional, List
@@ -16,9 +17,6 @@ from sqlalchemy import text, inspect, or_
 
 from . import models, database, logic, calibration
 
-# -----------------------------
-# LOGGING
-# -----------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("fit_backend")
 
@@ -67,6 +65,10 @@ def _coerce_float(x: Any) -> Optional[float]:
         return float(s)
     except Exception:
         return None
+
+def clean_dict(d: dict) -> dict:
+    """Удаляет None значения, чтобы logic.py мог безопасно использовать .get(..., default)"""
+    return {k: v for k, v in d.items() if v is not None}
 
 def garment_to_dict(g: models.Garment) -> Dict[str, Any]:
     return {
@@ -134,6 +136,7 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
     if not profile: raise HTTPException(status_code=404, detail="Profile not found")
 
+    # ИНИЦИАЛИЗАЦИЯ ПОЛЬЗОВАТЕЛЯ С КОМФОРТНЫМИ ВЕЩАМИ
     user = logic.Profile(
         height=profile.height or 175.0,
         chest=profile.chest or 100.0,
@@ -142,7 +145,9 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
         shoulders=profile.shoulders or 45.0,
         arm_length=profile.arm_length or 62.0,
         outseam=profile.leg_length or 105.0,
-        inseam=profile.inseam or 80.0
+        inseam=profile.inseam or 80.0,
+        problem_zones=profile.problem_zones or [],
+        comfort_C=profile.comfort_C or {}
     )
 
     items = get_cached_items(db)
@@ -153,25 +158,21 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
         theory = metrics.get("theory")
         if not theory: continue
 
-        model_size = theory.get("model_size", "M")
+        safe_theory = clean_dict(theory)
+        # В будущем здесь будем брать доступные размеры с сайта Lamoda. 
+        # Пока для тестирования считаем, что доступны все стандарты.
+        available_sizes = logic.SIZES_ORDER
         
-        best_score = -1e18
-        best_size = None
-        best_explain = ""
-
-        # ПРИНУДИТЕЛЬНЫЙ ПЕРЕБОР ВСЕХ РАЗМЕРОВ (XS -> 3XL)
-        for size_label in logic.SIZES_ORDER:
-            fit_res = logic.calculate_fit(user, model_size, theory, size_label)
-
-            if fit_res.score > best_score:
-                best_score = fit_res.score
-                best_size = size_label
-                explain_parts = [f"{fit_res.status} ({fit_res.score:.0f}%)"]
-                explain_parts.extend(fit_res.details.values())
-                explain_parts.extend(fit_res.warnings)
-                best_explain = " | ".join(explain_parts)
-
-        if best_size is None: continue
+        res_dict = logic.evaluate_all_sizes(user, safe_theory, available_sizes)
+        best_size = res_dict["best_size"]
+        
+        if not best_size: continue
+        
+        best_res = next((r for r in res_dict["all_results"] if r.size_label == best_size), None)
+        best_score = best_res.score if best_res else 0
+        
+        explain_parts = [f"{best_res.global_status} ({best_score:.0f}%)"] if best_res else []
+        if best_res: explain_parts.extend(best_res.warnings)
 
         results.append({
             "id": item.id,
@@ -182,8 +183,10 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
             "price": item.price,
             "best_size": best_size,
             "score": float(best_score),
-            "explain": best_explain,
+            "explain": " | ".join(explain_parts),
             "metrics": metrics,
+            "available_sizes": available_sizes,
+            "xray": [dataclasses.asdict(r) for r in res_dict["all_results"]]
         })
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -209,6 +212,7 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
         profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == int(fb.user_id)).first()
 
     if garment and profile and garment.metrics:
+        # ИНИЦИАЛИЗАЦИЯ ПОЛЬЗОВАТЕЛЯ С КОМФОРТНЫМИ ВЕЩАМИ
         user = logic.Profile(
             height=profile.height or 175.0,
             chest=profile.chest or 100.0,
@@ -217,49 +221,57 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
             shoulders=profile.shoulders or 45.0,
             arm_length=profile.arm_length or 62.0,
             outseam=profile.leg_length or 105.0,
-            inseam=profile.inseam or 80.0
+            inseam=profile.inseam or 80.0,
+            problem_zones=profile.problem_zones or [],
+            comfort_C=profile.comfort_C or {}
         )
 
         theory = garment.metrics.get("theory", {})
         ground_truth = garment.metrics.get("ground_truth", {})
 
         if theory:
-            model_size = theory.get("model_size", "M")
-            cat_type = theory.get("category_type", "top")
-            fit_profile = theory.get("fit_profile", "regular")
-            elastane = theory.get("elastane_pct", 0)
+            safe_theory = clean_dict(theory)
+            
+            # РАСЧЕТ А (Теория)
+            t_res_dict = logic.evaluate_all_sizes(user, safe_theory, logic.SIZES_ORDER)
+            best_t_size = t_res_dict["best_size"]
+            best_t_res = next((r for r in t_res_dict["all_results"] if r.size_label == best_t_size), None)
+            best_t_score = best_t_res.score if best_t_res else 0
 
-            best_t_score = -1
-            best_t_size = None
-            for sz in logic.SIZES_ORDER:
-                res = logic.calculate_fit(user, model_size, theory, sz)
-                if res.score > best_t_score:
-                    best_t_score = res.score
-                    best_t_size = sz
-
+            # РАСЧЕТ Б (Истина по рулетке)
             best_gt_score = -1
             best_gt_size = None
             if ground_truth:
-                ideal_ease = logic.DESIGN_EASE.get(fit_profile.lower(), logic.DESIGN_EASE['regular'])
-                base_ease_chest = ideal_ease['top'] if cat_type.lower() == 'top' else ideal_ease['bottom']
-                base_ease_waist = ideal_ease['bottom']
-                base_ease_hips = ideal_ease['bottom']
+                fit_profile = safe_theory.get("fit_profile", "regular")
+                cat_type = safe_theory.get("category_type", "top")
+                elastane = safe_theory.get("elastane_pct", 0)
+
+                ease_map = {'slim': (1.0, 0.5), 'regular': (3.0, 1.5), 'oversize': (7.0, 3.0)}
+                base_ease_top, base_ease_bot = ease_map.get(fit_profile.lower(), ease_map['regular'])
+                base_ease_chest = base_ease_top if cat_type.lower() == 'top' else base_ease_bot
+                base_ease_waist = base_ease_bot
+                base_ease_hips = base_ease_bot
+                
+                user_flat = user.to_flat_half()
 
                 for gt_size, gt_meas in ground_truth.items():
                     fake_base_data = {
                         'category_type': cat_type,
                         'fit_profile': fit_profile,
                         'elastane_pct': elastane,
-                        'height': theory.get('height', 175.0),
-                        'sleeve_type': theory.get('sleeve_type', 'long'),
-                        'leg_type': theory.get('leg_type', 'long'),
+                        'height': safe_theory.get('height', 175.0),
+                        'sleeve_type': safe_theory.get('sleeve_type', 'long'),
+                        'leg_type': safe_theory.get('leg_type', 'long'),
                     }
-                    if 'chest' in gt_meas: fake_base_data['chest'] = gt_meas['chest'] - base_ease_chest
-                    if 'waist' in gt_meas: fake_base_data['waist'] = gt_meas['waist'] - base_ease_waist
-                    if 'hips' in gt_meas: fake_base_data['hips'] = gt_meas['hips'] - base_ease_hips
+                    # Переводим рулетку (полный обхват) в flat_half и вычитаем идеальный припуск
+                    if 'chest' in gt_meas: fake_base_data['chest'] = gt_meas['chest'] - (base_ease_chest * 2.0)
+                    if 'waist' in gt_meas: fake_base_data['waist'] = gt_meas['waist'] - (base_ease_waist * 2.0)
+                    if 'hips' in gt_meas: fake_base_data['hips'] = gt_meas['hips'] - (base_ease_hips * 2.0)
                     if 'inseam' in gt_meas: fake_base_data['g_inseam'] = gt_meas['inseam']
 
-                    res = logic.calculate_fit(user, gt_size, fake_base_data, gt_size)
+                    # ВНИМАНИЕ: обновленный вызов с передачей объекта user
+                    res = logic.calculate_single_size(user_flat, user, gt_size, fake_base_data, gt_size, True)
+                    
                     if res.score > best_gt_score:
                         best_gt_score = res.score
                         best_gt_size = gt_size
@@ -269,7 +281,8 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
                 "theory_score": round(best_t_score),
                 "gt_size": best_gt_size,
                 "gt_score": round(best_gt_score) if best_gt_score != -1 else None,
-                "match": (best_t_size == best_gt_size) if best_gt_size else None
+                "match": (best_t_size == best_gt_size) if best_gt_size else None,
+                "xray": [dataclasses.asdict(r) for r in t_res_dict["all_results"]]
             }
 
     return {"status": "success", "analysis": analysis}

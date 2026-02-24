@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, JSON, Boolean, ForeignKey
 from datetime import datetime
 from .database import Base
 from pydantic import BaseModel
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
 # ============================
 #   SQLAlchemy MODELS
@@ -21,7 +21,6 @@ class Garment(Base):
     in_stock = Column(Boolean, default=True)
     metrics = Column(JSON)
 
-
 class Prior(Base):
     __tablename__ = "priors"
 
@@ -34,7 +33,6 @@ class Prior(Base):
     mu_sleeve = Column(Float)
     sigma_sleeve = Column(Float, default=1.0)
 
-
 class Feedback(Base):
     __tablename__ = "feedback"
 
@@ -45,7 +43,6 @@ class Feedback(Base):
     is_point_zero = Column(Boolean, default=False) 
     fit_matrix = Column(JSON, nullable=True) 
     created_at = Column(DateTime, default=datetime.utcnow)
-
 
 class BodyProfile(Base):
     __tablename__ = "body_profiles"
@@ -60,11 +57,14 @@ class BodyProfile(Base):
     hips = Column(Float)
     arm_length = Column(Float)
     leg_length = Column(Float)
-    inseam = Column(Float, nullable=True, default=80.0) # НОВОЕ ПОЛЕ: Шаговый шов
+    inseam = Column(Float, nullable=True, default=80.0)
+    
+    # НОВЫЕ ПОЛЯ ДЛЯ IP 2.0
+    problem_zones = Column(JSON, nullable=True) # Массив проблемных зон ["belly", "shoulders"]
+    comfort_C = Column(JSON, nullable=True)     # Любимые вещи: {"top": {"chest": 55}, "bottom": {"waist_bottom": 44}}
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
 
 # ============================
 #   Pydantic SCHEMAS
@@ -80,7 +80,9 @@ class BodyProfileCreate(BaseModel):
     hips: float
     arm_length: float
     leg_length: float
-    inseam: float = 80.0 # НОВОЕ ПОЛЕ
+    inseam: float = 80.0
+    problem_zones: Optional[List[str]] = None
+    comfort_C: Optional[Dict[str, Any]] = None
 
 class CalculateRequest(BaseModel):
     profile_id: int

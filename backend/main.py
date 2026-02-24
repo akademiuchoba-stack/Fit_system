@@ -26,7 +26,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
-# === ВОССТАНОВЛЕННЫЕ ПУТИ К ФАЙЛАМ ===
 INDEX_FILE = FRONTEND_DIR / "index.html"
 INDEX_JS_FILE = FRONTEND_DIR / "index.js"
 ADMIN_FILE = FRONTEND_DIR / "admin.html"
@@ -46,14 +45,13 @@ def invalidate_items_cache():
 def get_cached_items(db: Session):
     now = time()
     if _ITEMS_CACHE["items"] is None or (now - _ITEMS_CACHE["ts"]) > CACHE_TTL_SEC:
-        _ITEMS_CACHE["items"] = db.query(models.Garment).filter(models.Garment.in_stock == True).all()
+        _ITEMS_CACHE["items"] = db.query(models.Garment).filter(models.Garment.in_stock == True).order_by(models.Garment.id.desc()).all()
         _ITEMS_CACHE["ts"] = now
     return _ITEMS_CACHE["items"]
 
 def clean_dict(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
 
-# === ВОССТАНОВЛЕННАЯ ФУНКЦИЯ _coerce_float ===
 def _coerce_float(x: Any) -> Optional[float]:
     try:
         if x is None: return None
@@ -64,11 +62,7 @@ def _coerce_float(x: Any) -> Optional[float]:
         return None
 
 def garment_to_dict(g: models.Garment) -> Dict[str, Any]:
-    return {
-        "id": g.id, "sku": g.sku, "name": g.name, "platform": g.platform, 
-        "image_url": g.image_url, "image_url_back": getattr(g, "image_url_back", None), 
-        "price": g.price, "in_stock": bool(g.in_stock), "metrics": g.metrics or {}
-    }
+    return {"id": g.id, "sku": g.sku, "name": g.name, "platform": g.platform, "image_url": g.image_url, "image_url_back": getattr(g, "image_url_back", None), "price": g.price, "in_stock": bool(g.in_stock), "metrics": g.metrics or {}}
 
 @app.get("/api/profiles")
 def list_profiles(db: Session = Depends(database.get_db)):
@@ -115,20 +109,33 @@ def delete_profile(profile_id: int, db: Session = Depends(database.get_db)):
     return {"status": "deleted"}
 
 @app.post("/api/calculate")
-def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(database.get_db), limit: int = Query(30)):
+def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(database.get_db), limit: int = Query(50)):
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
     if not profile: raise HTTPException(status_code=404, detail="Profile not found")
 
+    # Безопасное чтение профиля (если в базе не хватает новых колонок, берем 0.0)
     user = logic.Profile(
-        height=profile.height or 175.0, shoulders=profile.shoulders or 0.0,
-        back_width=profile.back_width or 0.0, chest=profile.chest or 0.0, underbust=profile.underbust or 0.0,
-        waist_top=profile.waist_top or 0.0, belly=profile.belly or 0.0,
-        waist_bottom=profile.waist_bottom or 0.0, high_hip=profile.high_hip or 0.0,
-        hips=profile.hips or 0.0, thigh=profile.thigh or 0.0, knee=profile.knee or 0.0,
-        calf=profile.calf or 0.0, bicep=profile.bicep or 0.0, neck=profile.neck or 0.0,
-        arm_length=profile.arm_length or 0.0, outseam=profile.leg_length or 0.0,
-        inseam=profile.inseam or 0.0, length_dress=profile.length_dress or 0.0,
-        problem_zones=profile.problem_zones or [], comfort_C=profile.comfort_C or {}
+        height=getattr(profile, 'height', 175.0) or 175.0,
+        shoulders=getattr(profile, 'shoulders', 0.0) or 0.0,
+        back_width=getattr(profile, 'back_width', 0.0) or 0.0,
+        chest=getattr(profile, 'chest', 0.0) or 0.0,
+        underbust=getattr(profile, 'underbust', 0.0) or 0.0,
+        waist_top=getattr(profile, 'waist_top', 0.0) or 0.0,
+        belly=getattr(profile, 'belly', 0.0) or 0.0,
+        waist_bottom=getattr(profile, 'waist_bottom', 0.0) or 0.0,
+        high_hip=getattr(profile, 'high_hip', 0.0) or 0.0,
+        hips=getattr(profile, 'hips', 0.0) or 0.0,
+        thigh=getattr(profile, 'thigh', 0.0) or 0.0,
+        knee=getattr(profile, 'knee', 0.0) or 0.0,
+        calf=getattr(profile, 'calf', 0.0) or 0.0,
+        bicep=getattr(profile, 'bicep', 0.0) or 0.0,
+        neck=getattr(profile, 'neck', 0.0) or 0.0,
+        arm_length=getattr(profile, 'arm_length', 0.0) or 0.0,
+        outseam=getattr(profile, 'leg_length', 0.0) or 0.0,
+        inseam=getattr(profile, 'inseam', 0.0) or 0.0,
+        length_dress=getattr(profile, 'length_dress', 0.0) or 0.0,
+        problem_zones=getattr(profile, 'problem_zones', []) or [],
+        comfort_C=getattr(profile, 'comfort_C', {}) or {}
     )
 
     items = get_cached_items(db)
@@ -137,7 +144,16 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     for item in items:
         metrics = item.metrics or {}
         theory = metrics.get("theory")
-        if not theory: continue # Пропускаем пустые
+        
+        # Если теории нет, показываем товар-заглушку, чтобы он не исчезал с главной
+        if not theory:
+            results.append({
+                "id": item.id, "sku": item.sku, "name": item.name, "platform": item.platform,
+                "image_url": item.image_url, "price": item.price, "best_size": "N/A",
+                "score": 0.0, "explain": "⚠️ Требуется настроить Теорию (нажмите Builder)",
+                "metrics": metrics, "available_sizes": [], "xray": []
+            })
+            continue
 
         try:
             safe_theory = clean_dict(theory)
@@ -146,12 +162,13 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
             res_dict = logic.evaluate_all_sizes(user, safe_theory, available_sizes)
             best_size = res_dict["best_size"]
             
-            if not best_size: continue
-            
+            if not best_size:
+                best_size = "N/A"
+                
             best_res = next((r for r in res_dict["all_results"] if r.size_label == best_size), None)
-            best_score = best_res.score if best_res else 0
+            best_score = best_res.score if best_res else 0.0
             
-            explain_parts = [f"{best_res.global_status} ({best_score:.0f}%)"] if best_res else []
+            explain_parts = [f"{best_res.global_status} ({best_score:.0f}%)"] if best_res else ["МАЛО (0%)"]
             if best_res: explain_parts.extend(best_res.warnings)
 
             results.append({
@@ -162,7 +179,6 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
                 "xray": [dataclasses.asdict(r) for r in res_dict["all_results"]]
             })
         except Exception as e:
-            # ЗАЩИТА: Если расчет вещи упал, логируем и идем дальше (главная страница не упадет)
             logger.error(f"Calculate error for item {item.sku}: {e}")
             continue
 
@@ -180,15 +196,27 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
 
     if garment and profile and garment.metrics:
         user = logic.Profile(
-            height=profile.height or 175.0, shoulders=profile.shoulders or 0.0,
-            back_width=profile.back_width or 0.0, chest=profile.chest or 0.0, underbust=profile.underbust or 0.0,
-            waist_top=profile.waist_top or 0.0, belly=profile.belly or 0.0,
-            waist_bottom=profile.waist_bottom or 0.0, high_hip=profile.high_hip or 0.0,
-            hips=profile.hips or 0.0, thigh=profile.thigh or 0.0, knee=profile.knee or 0.0,
-            calf=profile.calf or 0.0, bicep=profile.bicep or 0.0, neck=profile.neck or 0.0,
-            arm_length=profile.arm_length or 0.0, outseam=profile.leg_length or 0.0,
-            inseam=profile.inseam or 0.0, length_dress=profile.length_dress or 0.0,
-            problem_zones=profile.problem_zones or [], comfort_C=profile.comfort_C or {}
+            height=getattr(profile, 'height', 175.0) or 175.0,
+            shoulders=getattr(profile, 'shoulders', 0.0) or 0.0,
+            back_width=getattr(profile, 'back_width', 0.0) or 0.0,
+            chest=getattr(profile, 'chest', 0.0) or 0.0,
+            underbust=getattr(profile, 'underbust', 0.0) or 0.0,
+            waist_top=getattr(profile, 'waist_top', 0.0) or 0.0,
+            belly=getattr(profile, 'belly', 0.0) or 0.0,
+            waist_bottom=getattr(profile, 'waist_bottom', 0.0) or 0.0,
+            high_hip=getattr(profile, 'high_hip', 0.0) or 0.0,
+            hips=getattr(profile, 'hips', 0.0) or 0.0,
+            thigh=getattr(profile, 'thigh', 0.0) or 0.0,
+            knee=getattr(profile, 'knee', 0.0) or 0.0,
+            calf=getattr(profile, 'calf', 0.0) or 0.0,
+            bicep=getattr(profile, 'bicep', 0.0) or 0.0,
+            neck=getattr(profile, 'neck', 0.0) or 0.0,
+            arm_length=getattr(profile, 'arm_length', 0.0) or 0.0,
+            outseam=getattr(profile, 'leg_length', 0.0) or 0.0,
+            inseam=getattr(profile, 'inseam', 0.0) or 0.0,
+            length_dress=getattr(profile, 'length_dress', 0.0) or 0.0,
+            problem_zones=getattr(profile, 'problem_zones', []) or [],
+            comfort_C=getattr(profile, 'comfort_C', {}) or {}
         )
 
         theory = garment.metrics.get("theory", {})

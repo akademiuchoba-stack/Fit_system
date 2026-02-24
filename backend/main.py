@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect, or_
+from sqlalchemy.orm.attributes import flag_modified  # <-- ВОТ ЭТО СПАСЕТ НАШ JSON
 
 from . import models, database, logic, calibration
 
@@ -113,7 +114,6 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
     profile = db.query(models.BodyProfile).filter(models.BodyProfile.id == req.profile_id).first()
     if not profile: raise HTTPException(status_code=404, detail="Profile not found")
 
-    # Безопасное чтение профиля (если в базе не хватает новых колонок, берем 0.0)
     user = logic.Profile(
         height=getattr(profile, 'height', 175.0) or 175.0,
         shoulders=getattr(profile, 'shoulders', 0.0) or 0.0,
@@ -145,7 +145,6 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
         metrics = item.metrics or {}
         theory = metrics.get("theory")
         
-        # Если теории нет, показываем товар-заглушку, чтобы он не исчезал с главной
         if not theory:
             results.append({
                 "id": item.id, "sku": item.sku, "name": item.name, "platform": item.platform,
@@ -196,27 +195,15 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
 
     if garment and profile and garment.metrics:
         user = logic.Profile(
-            height=getattr(profile, 'height', 175.0) or 175.0,
-            shoulders=getattr(profile, 'shoulders', 0.0) or 0.0,
-            back_width=getattr(profile, 'back_width', 0.0) or 0.0,
-            chest=getattr(profile, 'chest', 0.0) or 0.0,
-            underbust=getattr(profile, 'underbust', 0.0) or 0.0,
-            waist_top=getattr(profile, 'waist_top', 0.0) or 0.0,
-            belly=getattr(profile, 'belly', 0.0) or 0.0,
-            waist_bottom=getattr(profile, 'waist_bottom', 0.0) or 0.0,
-            high_hip=getattr(profile, 'high_hip', 0.0) or 0.0,
-            hips=getattr(profile, 'hips', 0.0) or 0.0,
-            thigh=getattr(profile, 'thigh', 0.0) or 0.0,
-            knee=getattr(profile, 'knee', 0.0) or 0.0,
-            calf=getattr(profile, 'calf', 0.0) or 0.0,
-            bicep=getattr(profile, 'bicep', 0.0) or 0.0,
-            neck=getattr(profile, 'neck', 0.0) or 0.0,
-            arm_length=getattr(profile, 'arm_length', 0.0) or 0.0,
-            outseam=getattr(profile, 'leg_length', 0.0) or 0.0,
-            inseam=getattr(profile, 'inseam', 0.0) or 0.0,
-            length_dress=getattr(profile, 'length_dress', 0.0) or 0.0,
-            problem_zones=getattr(profile, 'problem_zones', []) or [],
-            comfort_C=getattr(profile, 'comfort_C', {}) or {}
+            height=getattr(profile, 'height', 175.0) or 175.0, shoulders=getattr(profile, 'shoulders', 0.0) or 0.0,
+            back_width=getattr(profile, 'back_width', 0.0) or 0.0, chest=getattr(profile, 'chest', 0.0) or 0.0, underbust=getattr(profile, 'underbust', 0.0) or 0.0,
+            waist_top=getattr(profile, 'waist_top', 0.0) or 0.0, belly=getattr(profile, 'belly', 0.0) or 0.0,
+            waist_bottom=getattr(profile, 'waist_bottom', 0.0) or 0.0, high_hip=getattr(profile, 'high_hip', 0.0) or 0.0,
+            hips=getattr(profile, 'hips', 0.0) or 0.0, thigh=getattr(profile, 'thigh', 0.0) or 0.0, knee=getattr(profile, 'knee', 0.0) or 0.0,
+            calf=getattr(profile, 'calf', 0.0) or 0.0, bicep=getattr(profile, 'bicep', 0.0) or 0.0, neck=getattr(profile, 'neck', 0.0) or 0.0,
+            arm_length=getattr(profile, 'arm_length', 0.0) or 0.0, outseam=getattr(profile, 'leg_length', 0.0) or 0.0,
+            inseam=getattr(profile, 'inseam', 0.0) or 0.0, length_dress=getattr(profile, 'length_dress', 0.0) or 0.0,
+            problem_zones=getattr(profile, 'problem_zones', []) or [], comfort_C=getattr(profile, 'comfort_C', {}) or {}
         )
 
         theory = garment.metrics.get("theory", {})
@@ -298,6 +285,7 @@ def builder_get(sku: str = Query(...), db: Session = Depends(database.get_db)):
 def builder_list(limit: int = Query(20), db: Session = Depends(database.get_db)):
     return {"items": [garment_to_dict(g) for g in db.query(models.Garment).order_by(models.Garment.id.desc()).limit(limit).all()]}
 
+# === ЖЕЛЕЗОБЕТОННОЕ СОХРАНЕНИЕ ТЕОРИИ И РУЛЕТКИ ===
 @app.post("/api/admin/builder/upsert")
 def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(database.get_db)):
     sku = (payload.get("sku") or "").strip()
@@ -307,24 +295,49 @@ def builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(da
     created = False
     if not g:
         g = models.Garment(sku=sku)
+        db.add(g)
         created = True
 
-    g.name = (payload.get("name") or g.name or sku).strip()
-    g.platform = (payload.get("platform") or g.platform or "manual").strip()
-    if payload.get("image_url"): g.image_url = payload.get("image_url").strip()
-    if payload.get("image_url_back"): g.image_url_back = payload.get("image_url_back").strip()
+    # Безопасное точечное обновление (если поля нет в payload, мы его не затираем)
+    if "name" in payload:
+        g.name = (payload["name"] or sku).strip()
+    elif not g.name:
+        g.name = sku
+        
+    if "platform" in payload:
+        g.platform = (payload["platform"] or "manual").strip()
+        
+    if "image_url" in payload:
+        g.image_url = payload["image_url"].strip() if payload["image_url"] else None
+        
+    if "image_url_back" in payload:
+        g.image_url_back = payload["image_url_back"].strip() if payload["image_url_back"] else None
     
-    pr = _coerce_float(payload.get("price"))
-    if pr is not None: g.price = pr
-    g.in_stock = bool(payload.get("in_stock", True))
+    if "price" in payload:
+        g.price = _coerce_float(payload["price"])
+        
+    if "in_stock" in payload:
+        g.in_stock = bool(payload["in_stock"])
 
-    current_metrics = dict(g.metrics or {})
-    if "theory" in payload: current_metrics["theory"] = payload["theory"]
-    if "ground_truth" in payload: current_metrics["ground_truth"] = payload["ground_truth"]
+    # Обязательно делаем КОПИЮ текущего словаря
+    current_metrics = g.metrics or {}
+    new_metrics = dict(current_metrics) 
+    
+    if "theory" in payload: 
+        new_metrics["theory"] = payload["theory"]
+    if "ground_truth" in payload: 
+        new_metrics["ground_truth"] = payload["ground_truth"]
 
-    g.metrics = current_metrics
-
-    db.add(g); db.commit(); invalidate_items_cache()
+    g.metrics = new_metrics
+    
+    # МАГИЯ SQLALCHEMY: Принудительно сообщаем базе, что JSON изменился
+    flag_modified(g, "metrics") 
+    
+    db.commit()
+    invalidate_items_cache()
+    
+    logger.info(f"Upserted item SKU: {sku}. Metrics theory keys: {list(new_metrics.get('theory', {}).keys())}")
+    
     return {"ok": True, "action": "created" if created else "updated"}
 
 @app.delete("/api/admin/builder/delete")

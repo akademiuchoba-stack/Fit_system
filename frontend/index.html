@@ -64,37 +64,25 @@
             <form id="profile-form" class="space-y-8">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-4">
-                  <h3 class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold">1. Базовые данные</h3>
+                  <h3 class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold">1. Идентификация</h3>
                   <input name="name" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:ring-2 outline-none font-bold" placeholder="Имя профиля*"/>
                   <div class="grid grid-cols-2 gap-3">
-                    <select name="gender" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:ring-2 outline-none">
+                    <select id="gender_select" name="gender" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:ring-2 outline-none">
                       <option value="male">Мужской</option>
                       <option value="female">Женский</option>
                     </select>
                     <input type="number" step="0.1" name="height" class="w-full px-4 py-3 rounded-2xl border border-gray-200 bg-gray-50 focus:ring-2 outline-none" placeholder="Рост (см)"/>
                   </div>
                 </div>
-                
-                <div class="space-y-4">
-                  <h3 class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold flex items-center">
-                    2. Проблемные зоны
-                    <div class="group relative inline-block ml-1 cursor-help"><span class="text-indigo-400">[?]</span><div class="hidden group-hover:block absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-lg normal-case font-normal leading-tight">Отметьте зоны, где одежда часто жмет. Алгоритм усилит штрафы за тесноту в этих местах.</div></div>
-                  </h3>
-                  <div class="flex flex-wrap gap-2 text-sm">
-                    <label class="flex items-center gap-2 p-2 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"><input type="checkbox" name="pz_shoulders" value="shoulders" class="w-4 h-4 text-indigo-600 rounded"> Плечи/Спина</label>
-                    <label class="flex items-center gap-2 p-2 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"><input type="checkbox" name="pz_chest" value="chest" class="w-4 h-4 text-indigo-600 rounded"> Грудь</label>
-                    <label class="flex items-center gap-2 p-2 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"><input type="checkbox" name="pz_belly" value="belly" class="w-4 h-4 text-indigo-600 rounded"> Живот</label>
-                    <label class="flex items-center gap-2 p-2 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"><input type="checkbox" name="pz_hips" value="hips" class="w-4 h-4 text-indigo-600 rounded"> Бедра</label>
-                    <label class="flex items-center gap-2 p-2 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"><input type="checkbox" name="pz_thigh" value="thigh" class="w-4 h-4 text-indigo-600 rounded"> Ляжки</label>
-                    <label class="flex items-center gap-2 p-2 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100"><input type="checkbox" name="pz_bicep" value="bicep" class="w-4 h-4 text-indigo-600 rounded"> Руки (Бицепс)</label>
-                  </div>
+                <div class="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 flex flex-col justify-center">
+                    <div class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-2">💡 Как работает алгоритм</div>
+                    <div class="text-xs text-gray-600 leading-relaxed">Вводите <b>ПОЛНЫЙ ОБХВАТ</b> для тела (лентой вокруг).<br>Вводите <b>ПОЛУОБХВАТ</b> для любимых вещей (на столе от шва до шва).<br>Отмечайте галочкой <b>"Часто жмет?"</b>, чтобы алгоритм давал вам больше свободы в этой зоне.</div>
                 </div>
               </div>
 
               <div class="pt-6 border-t border-gray-100">
                 <h3 class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-4 flex items-center">
-                  3. Замеры тела (Полный обхват)
-                  <div class="group relative inline-block ml-1 cursor-help"><span class="text-indigo-400">[?]</span><div class="hidden group-hover:block absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2 bg-gray-900 text-white text-[10px] rounded-lg shadow-lg normal-case font-normal leading-tight">Вводите полные обхваты (лента вокруг тела). Система сама переведет их в математические полуобхваты. Если не знаете замер — оставьте пустым, алгоритм вычислит его по пропорциям.</div></div>
+                  2. Замеры тела (Полный обхват)
                 </h3>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -102,26 +90,47 @@
                     <div class="font-bold text-sm text-gray-700 border-b border-gray-100 pb-1 mb-2">Верх (Торс и Руки)</div>
                     <div class="grid grid-cols-2 gap-3">
                       <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Шея <span title="Обхват основания шеи" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_neck" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Плечи <span title="От края до края плеча через спину (это единственный замер НЕ в обхват)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_shoulders" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block">
+                          <div class="flex justify-between items-center mb-1"><div class="text-[10px] text-gray-500 font-bold">Плечи <span title="Ширина от края до края плеча по спине (НЕ обхват)" class="cursor-help text-indigo-400">[?]</span></div><label class="text-[9px] text-rose-500 font-bold flex items-center gap-1 cursor-pointer"><input type="checkbox" name="pz_shoulders" class="rounded"> Жмет?</label></div>
+                          <input type="number" step="0.1" name="b_shoulders" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm">
+                      </label>
                       <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Ширина спины <span title="От подмышки до подмышки по спине" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_back_width" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Грудь <span title="Обхват по самым выступающим точкам" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_chest" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Талия (узкая) <span title="Самое узкое место туловища (для приталенных рубашек)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_waist_top" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Бицепс <span title="Обхват самой широкой части руки" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_bicep" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Длина руки <span title="От плечевого сустава до косточки запястья" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_arm_length" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block">
+                          <div class="flex justify-between items-center mb-1"><div class="text-[10px] text-gray-500 font-bold">Грудь <span title="Обхват по самым выступающим точкам" class="cursor-help text-indigo-400">[?]</span></div><label class="text-[9px] text-rose-500 font-bold flex items-center gap-1 cursor-pointer"><input type="checkbox" name="pz_chest" class="rounded"> Жмет?</label></div>
+                          <input type="number" step="0.1" name="b_chest" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm">
+                      </label>
+                      <label id="wrap_underbust" class="block hidden"><div class="text-[10px] text-gray-500 font-bold mb-1">Под грудью <span title="Обхват прямо под грудью (для платьев и топов)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_underbust" class="w-full px-3 py-2 rounded-xl border bg-indigo-50 text-sm"></label>
+                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Талия (узкая) <span title="Самое узкое место туловища (естественная талия)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_waist_top" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block">
+                          <div class="flex justify-between items-center mb-1"><div class="text-[10px] text-gray-500 font-bold">Бицепс <span title="Обхват самой широкой части руки" class="cursor-help text-indigo-400">[?]</span></div><label class="text-[9px] text-rose-500 font-bold flex items-center gap-1 cursor-pointer"><input type="checkbox" name="pz_bicep" class="rounded"> Жмет?</label></div>
+                          <input type="number" step="0.1" name="b_bicep" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm">
+                      </label>
+                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Длина руки <span title="От плечевого сустава до запястья" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_arm_length" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label id="wrap_length_dress" class="block hidden"><div class="text-[10px] text-gray-500 font-bold mb-1">Длина платья <span title="Желаемая длина платья от плеча" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_length_dress" class="w-full px-3 py-2 rounded-xl border bg-indigo-50 text-sm"></label>
                     </div>
                   </div>
 
                   <div class="space-y-3">
                     <div class="font-bold text-sm text-gray-700 border-b border-gray-100 pb-1 mb-2">Низ (Брюки и Ноги)</div>
                     <div class="grid grid-cols-2 gap-3">
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Пояс брюк <span title="Обхват там, где вы обычно носите ремень" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_waist_bottom" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Живот / Косточки <span title="Обхват на 8-12 см ниже пояса (выступающий живот)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_high_hip" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Бедра <span title="Обхват по самым выступающим точкам ягодиц" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_hips" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Бедро (Ляжка) <span title="Обхват ноги на 2-3 см ниже паха" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_thigh" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Пояс брюк <span title="Обхват на том уровне, где вы носите ремень" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_waist_bottom" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block">
+                          <div class="flex justify-between items-center mb-1"><div class="text-[10px] text-gray-500 font-bold">Живот <span title="Выступающая часть живота (если есть)" class="cursor-help text-indigo-400">[?]</span></div><label class="text-[9px] text-rose-500 font-bold flex items-center gap-1 cursor-pointer"><input type="checkbox" name="pz_belly" class="rounded"> Жмет?</label></div>
+                          <input type="number" step="0.1" name="b_belly" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm">
+                      </label>
+                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Косточки таза <span title="Обхват на 8-12 см ниже пояса" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_high_hip" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block">
+                          <div class="flex justify-between items-center mb-1"><div class="text-[10px] text-gray-500 font-bold">Бедра <span title="Обхват по самым выступающим точкам ягодиц" class="cursor-help text-indigo-400">[?]</span></div><label class="text-[9px] text-rose-500 font-bold flex items-center gap-1 cursor-pointer"><input type="checkbox" name="pz_hips" class="rounded"> Жмет?</label></div>
+                          <input type="number" step="0.1" name="b_hips" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm">
+                      </label>
+                      <label class="block">
+                          <div class="flex justify-between items-center mb-1"><div class="text-[10px] text-gray-500 font-bold">Бедро (Ляжка) <span title="Обхват ноги на 2-3 см ниже паха" class="cursor-help text-indigo-400">[?]</span></div><label class="text-[9px] text-rose-500 font-bold flex items-center gap-1 cursor-pointer"><input type="checkbox" name="pz_thigh" class="rounded"> Жмет?</label></div>
+                          <input type="number" step="0.1" name="b_thigh" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm">
+                      </label>
                       <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Колено <span title="Обхват колена" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_knee" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
                       <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Икра <span title="Обхват самой широкой части икры" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_calf" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Внешний шов <span title="От линии пояса до пола (по боку)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_outseam" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
-                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Внутренний шов <span title="От паха до пола (по внутренней стороне ноги)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_inseam" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Внеш. шов <span title="Длина от пояса до пола (по боку)" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_outseam" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
+                      <label class="block"><div class="text-[10px] text-gray-500 font-bold mb-1">Шаг. шов <span title="Длина от паха до пола" class="cursor-help text-indigo-400">[?]</span></div><input type="number" step="0.1" name="b_inseam" class="w-full px-3 py-2 rounded-xl border bg-gray-50 text-sm"></label>
                     </div>
                   </div>
                 </div>
@@ -129,42 +138,37 @@
 
               <div class="pt-6 border-t border-gray-100">
                 <div class="p-6 bg-indigo-50/50 rounded-3xl border border-indigo-100 relative overflow-hidden">
-                  <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-100 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                  
-                  <h3 class="text-sm uppercase tracking-widest text-indigo-800 font-extrabold mb-1 flex items-center relative z-10">
-                    4. Эталонные вещи (Comfort_C)
-                    <div class="group relative inline-block ml-2 cursor-help"><span class="text-indigo-500">[?] Правила замера одежды</span><div class="hidden group-hover:block absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 bg-gray-900 text-white text-[11px] rounded-xl shadow-2xl normal-case font-normal leading-relaxed">Положите вашу любимую вещь ровно на стол или пол.<br><br><b>ВСЕ ШИРИНЫ</b> измеряются от шва до шва (ПОЛУОБХВАТЫ). Ничего не умножайте на 2.<br><b>Грудь:</b> от подмышки до подмышки.<br><b>Талия:</b> самое узкое место.<br><b>Бедра/Живот:</b> на 8-12 см ниже пояса.<br><b>Посадка (Rise):</b> от пахового шва вверх до края пояса.</div></div>
-                  </h3>
-                  <p class="text-[11px] text-gray-500 mb-5 relative z-10">Математический сдвиг: Алгоритм подстроит расчеты под вашу привычку носить вещи именно так.</p>
+                  <h3 class="text-sm uppercase tracking-widest text-indigo-800 font-extrabold mb-1 relative z-10">3. Эталонные вещи (ПОЛУОБХВАТЫ)</h3>
+                  <p class="text-[11px] text-gray-500 mb-5 relative z-10">Положите вещь на стол и измерьте ширину от шва до шва.</p>
                   
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
                     <div class="bg-white p-4 rounded-2xl shadow-sm border border-white/50">
-                      <div class="font-black text-sm mb-3 text-indigo-900 border-b border-gray-50 pb-2">Любимый Верх (Рубашка / Куртка)</div>
+                      <div class="font-black text-sm mb-3 text-indigo-900 border-b border-gray-50 pb-2">Любимый Верх (Рубашка / Топ)</div>
                       <div class="grid grid-cols-2 gap-2">
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Плечи <span title="От шва рукава до шва рукава" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_shoulders" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Спина <span title="Ширина по лопаткам" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_back" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Грудь <span title="От подмышки до подмышки" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_chest" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Талия <span title="В самом узком месте (если есть)" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_waist" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Низ <span title="Ширина по нижнему краю" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_hem" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Длина изд. <span title="От воротника вниз" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_length" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Рукав <span title="От плечевого шва до манжеты" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_sleeve" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Бицепс <span title="Ширина рукава ниже подмышки" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_bicep" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Плечи <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_shoulders" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Спина <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_back" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Грудь <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_chest" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Талия <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_waist" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Низ <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_hem" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Длина изд. <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_length" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Рукав <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_sleeve" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Бицепс <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_top_bicep" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
                       </div>
                     </div>
 
                     <div class="bg-white p-4 rounded-2xl shadow-sm border border-white/50">
                       <div class="font-black text-sm mb-3 text-indigo-900 border-b border-gray-50 pb-2">Любимый Низ (Брюки / Джинсы)</div>
                       <div class="grid grid-cols-2 gap-2">
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Пояс <span title="От края до края застегнутого пояса" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_waist" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Живот <span title="На 8-12 см ниже пояса" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_high_hip" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Бедра <span title="По самой широкой части" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_hips" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Ляжка <span title="Ширина штанины вверху" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_thigh" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Колено <span title="Ширина штанины в колене" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_knee" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Ширина низа <span title="Ширина штанины в самом низу" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_opening" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Шаг. шов <span title="От паха по внутреннему шву до низа" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_inseam" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Внеш. шов <span title="Общая длина сбоку" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_outseam" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Front Rise <span title="Посадка: от пахового креста до верха пуговицы" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_front_rise" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
-                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Back Rise <span title="Посадка: от пахового креста до верха спины" class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_back_rise" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Пояс <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_waist" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Живот <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_high_hip" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Бедра <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_hips" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Ляжка <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_thigh" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Колено <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_knee" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Ширина низа <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_opening" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Front Rise <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_front_rise" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Back Rise <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_back_rise" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Шаг. шов <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_inseam" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
+                        <label class="block"><div class="text-[10px] text-gray-400 font-bold mb-1">Внеш. шов <span class="cursor-help">[?]</span></div><input type="number" step="0.1" name="c_bot_outseam" class="w-full px-3 py-2 rounded-lg border bg-gray-50 text-sm"></label>
                       </div>
                     </div>
                   </div>
@@ -172,12 +176,8 @@
               </div>
 
               <div class="flex items-center gap-3 pt-6 border-t border-gray-100">
-                <button type="submit" id="btn-save-profile" class="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-extrabold text-sm uppercase tracking-widest hover:bg-indigo-600 transition shadow-xl">
-                  Сохранить профиль
-                </button>
-                <button type="button" id="btn-cancel-edit" class="hidden px-6 py-4 rounded-2xl bg-white border-2 border-gray-200 text-gray-700 font-extrabold text-sm uppercase tracking-widest hover:bg-gray-50">
-                  Отмена
-                </button>
+                <button type="submit" id="btn-save-profile" class="flex-1 py-4 rounded-2xl bg-gray-900 text-white font-extrabold text-sm uppercase tracking-widest hover:bg-indigo-600 transition shadow-xl">Сохранить профиль</button>
+                <button type="button" id="btn-cancel-edit" class="hidden px-6 py-4 rounded-2xl bg-white border-2 border-gray-200 text-gray-700 font-extrabold text-sm uppercase tracking-widest hover:bg-gray-50">Отмена</button>
               </div>
 
               <input type="hidden" name="id" />

@@ -2,17 +2,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Any, Tuple
 
-# ==========================================
-# 1. КОНВЕНЦИИ И ПЕРЕВОДЫ (flat_half)
-# ==========================================
 ZONES_RU = {
     'shoulders': 'Плечи',
     'back_width': 'Спина',
     'chest': 'Грудь',
-    'waist_top': 'Талия (Верх)',
+    'underbust': 'Под грудью',
+    'waist_top': 'Талия (естественная)',
+    'belly': 'Живот (выступающий)',
     'hem_top': 'Низ изделия',
-    'waist_bottom': 'Пояс (Низ)',
-    'high_hip': 'Живот / Верх бедер',
+    'waist_bottom': 'Пояс (линия ремня)',
+    'high_hip': 'Верх бедер (косточки)',
     'hips': 'Бедра',
     'front_rise': 'Посадка спереди',
     'back_rise': 'Посадка сзади',
@@ -22,25 +21,17 @@ ZONES_RU = {
     'bicep': 'Бицепс',
     'collar': 'Воротник',
     'sleeve': 'Рукав',
-    'length_top': 'Длина изделия',
+    'length_top': 'Длина (Торс)',
+    'length_dress': 'Длина (Платье)',
     'inseam': 'Шаговый шов',
     'outseam': 'Внешний шов'
 }
 
 MIN_FUNC_ALLOWANCE = {
-    'shoulders': 0.5,
-    'back_width': 0.5,
-    'chest': 2.0,
-    'waist_top': 1.0,
-    'hem_top': 1.0,
-    'waist_bottom': 0.5,
-    'high_hip': 1.0,
-    'hips': 1.0,
-    'thigh': 0.5,
-    'bicep': 0.5,
-    'sleeve': 0.0,
-    'length_top': 0.0,
-    'inseam': -2.0 
+    'shoulders': 0.5, 'back_width': 0.5, 'chest': 2.0, 'underbust': 1.0,
+    'waist_top': 1.0, 'belly': 1.5, 'hem_top': 1.0, 'waist_bottom': 0.5,
+    'high_hip': 1.0, 'hips': 1.0, 'thigh': 0.5, 'bicep': 0.5,
+    'sleeve': 0.0, 'length_top': 0.0, 'inseam': -2.0 
 }
 
 SIZES_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL']
@@ -48,40 +39,27 @@ SIZES_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL']
 @dataclass
 class Profile:
     height: float
-    shoulders: float
-    back_width: float
-    chest: float
-    waist_top: float
-    waist_bottom: float
-    high_hip: float
-    hips: float
-    thigh: float
-    knee: float
-    calf: float
-    bicep: float
-    neck: float
-    arm_length: float
-    outseam: float
-    inseam: float
+    shoulders: float; back_width: float; chest: float; underbust: float
+    waist_top: float; belly: float; waist_bottom: float; high_hip: float; hips: float
+    thigh: float; knee: float; calf: float; bicep: float; neck: float
+    arm_length: float; outseam: float; inseam: float; length_dress: float
     problem_zones: List[str] = field(default_factory=list)
     comfort_C: Dict[str, dict] = field(default_factory=dict)
 
     def to_flat_half(self) -> dict:
-        """
-        Перевод реальных замеров тела в полуобхваты. 
-        Если пользователь не ввел замер, система аппроксимирует его по формулам.
-        """
-        flat = {'height': self.height, 'sleeve': self.arm_length, 'outseam': self.outseam, 'inseam': self.inseam}
+        flat = {'height': self.height, 'sleeve': self.arm_length, 'outseam': self.outseam, 'inseam': self.inseam, 'length_dress': self.length_dress}
         
         flat['shoulders'] = self.shoulders if self.shoulders else 42.0
         flat['back_width'] = self.back_width if self.back_width else (flat['shoulders'] - 2.0)
         flat['chest'] = (self.chest / 2.0) if self.chest else 45.0
+        flat['underbust'] = (self.underbust / 2.0) if self.underbust else (flat['chest'] - 4.0)
         
         flat['waist_top'] = (self.waist_top / 2.0) if self.waist_top else (flat['chest'] - 2.0)
+        flat['belly'] = (self.belly / 2.0) if self.belly else flat['waist_top']
         flat['waist_bottom'] = (self.waist_bottom / 2.0) if self.waist_bottom else 42.0
+        flat['high_hip'] = (self.high_hip / 2.0) if self.high_hip else ((flat['waist_bottom'] + (self.hips/2.0 if self.hips else 48.0)) / 2.0)
         flat['hips'] = (self.hips / 2.0) if self.hips else 48.0
         
-        flat['high_hip'] = (self.high_hip / 2.0) if self.high_hip else ((flat['waist_bottom'] + flat['hips']) / 2.0)
         flat['thigh'] = (self.thigh / 2.0) if self.thigh else (flat['hips'] * 0.58)
         flat['knee'] = (self.knee / 2.0) if self.knee else (flat['thigh'] * 0.7)
         flat['leg_opening'] = (self.calf / 2.0) if self.calf else 18.0
@@ -93,31 +71,17 @@ class Profile:
 
 @dataclass
 class XRayZone:
-    zone_name: str
-    body_val: float
-    target_val: float
-    garment_val: float
-    delta_eff: float
-    status: str
-    penalty: float
-    message: str
-    inferred: bool 
+    zone_name: str; body_val: float; target_val: float; garment_val: float
+    delta_eff: float; status: str; penalty: float; message: str; inferred: bool 
 
 @dataclass
 class SizeResult:
-    size_label: str
-    is_available: bool
-    score: float
-    hard_fit: str
-    global_status: str
-    xray_zones: List[XRayZone]
-    warnings: List[str]
+    size_label: str; is_available: bool; score: float; hard_fit: str
+    global_status: str; xray_zones: List[XRayZone]; warnings: List[str]
 
 def grade_girth(base_val: float, model_size: str, target_size: str) -> float:
     mapping = {'XS': -4.0, 'S': -2.0, 'M': 0.0, 'L': 2.0, 'XL': 6.0, 'XXL': 10.0, '3XL': 14.0}
-    offset_model = mapping.get(model_size.upper(), 0.0)
-    offset_target = mapping.get(target_size.upper(), 0.0)
-    return base_val + (offset_target - offset_model)
+    return base_val + (mapping.get(target_size.upper(), 0.0) - mapping.get(model_size.upper(), 0.0))
 
 def grade_length(base_val: float, model_size: str, target_size: str) -> float:
     try: steps = SIZES_ORDER.index(target_size.upper()) - SIZES_ORDER.index(model_size.upper())
@@ -125,11 +89,7 @@ def grade_length(base_val: float, model_size: str, target_size: str) -> float:
     return base_val + (steps * 1.0)
 
 def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: str, theory: dict, target_size: str, is_available: bool) -> SizeResult:
-    warnings = []
-    xray = []
-    score = 100.0
-    hard_fit_status = "PASS"
-
+    warnings = []; xray = []; score = 100.0; hard_fit_status = "PASS"
     cat_type = theory.get('category_type', 'top').lower()
     fit_profile = theory.get('fit_profile', 'regular').lower()
     elastane = float(theory.get('elastane_pct', 0.0))
@@ -142,11 +102,7 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
     ease_map = {'slim': (1.0, 0.5), 'regular': (3.0, 1.5), 'oversize': (7.0, 3.0)}
     base_ease_top, base_ease_bot = ease_map.get(fit_profile, ease_map['regular'])
 
-    # ==========================================
-    # 2. INFERENCE ENGINE (ESTIMATE MODE)
-    # ==========================================
-    base_g = {}
-    inferred_zones = set()
+    base_g = {}; inferred_zones = set()
 
     if cat_type == 'top':
         base_g['shoulders'] = theory.get('shoulders', 42.0)
@@ -155,8 +111,9 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
         base_g['waist_top'] = float(theory['g_waist_top']) if theory.get('g_waist_top') else (base_g['chest'] - (1.0 if fit_profile == 'slim' else 0.0))
         if not theory.get('g_waist_top'): inferred_zones.add('waist_top')
 
-        base_g['hem_top'] = float(theory['g_hem_top']) if theory.get('g_hem_top') else base_g['waist_top']
-        if not theory.get('g_hem_top'): inferred_zones.add('hem_top')
+        # Интеграция Живота (belly) для верха
+        base_g['belly'] = float(theory['g_belly']) if theory.get('g_belly') else base_g['waist_top']
+        if not theory.get('g_belly'): inferred_zones.add('belly')
 
         base_g['back_width'] = float(theory['g_back_width']) if theory.get('g_back_width') else (base_g['chest'] - 4.0)
         if not theory.get('g_back_width'): inferred_zones.add('back_width')
@@ -174,6 +131,10 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
         base_g['high_hip'] = float(theory['g_high_hip']) if theory.get('g_high_hip') else max(base_g['waist_bottom'], base_g['hips'] - (2.0 if fit_profile == 'slim' else 1.0))
         if not theory.get('g_high_hip'): inferred_zones.add('high_hip')
 
+        # Интеграция Живота (belly) для низа (высокая посадка)
+        base_g['belly'] = float(theory['g_belly']) if theory.get('g_belly') else base_g['waist_bottom']
+        if not theory.get('g_belly'): inferred_zones.add('belly')
+
         base_g['thigh'] = float(theory['g_thigh']) if theory.get('g_thigh') else (base_g['hips'] * 0.60)
         if not theory.get('g_thigh'): inferred_zones.add('thigh')
 
@@ -184,9 +145,6 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
         if theory.get('g_front_rise'): base_g['front_rise'] = float(theory['g_front_rise'])
         if theory.get('g_back_rise'): base_g['back_rise'] = float(theory['g_back_rise'])
 
-    # ==========================================
-    # 3. ГРЕЙДИРОВАНИЕ
-    # ==========================================
     g_graded = {}
     for z, val in base_g.items():
         if z in ['sleeve', 'length_top', 'inseam', 'outseam', 'front_rise', 'back_rise']:
@@ -194,12 +152,9 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
         else:
             g_graded[z] = grade_girth(val, model_size, target_size)
 
-    # ==========================================
-    # 4. ФОРМИРОВАНИЕ ЗОН И ИНТЕГРАЦИЯ COMFORT_C
-    # ==========================================
     zones_to_check = {}
     for z in base_g.keys():
-        if z in ['front_rise', 'back_rise']: continue # Длины посадки проверяются иначе
+        if z in ['front_rise', 'back_rise']: continue
         ip0 = base_ease_top if cat_type == 'top' and z not in ['sleeve', 'length_top'] else \
              (base_ease_bot if cat_type == 'bottom' and z not in ['inseam'] else 0.0)
         zones_to_check[z] = {'B': user_flat[z], 'G': g_graded[z], 'IP0': ip0}
@@ -212,31 +167,23 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
         if user_profile.comfort_C and cat_type in user_profile.comfort_C:
             cat_comfort = user_profile.comfort_C[cat_type]
             if z in cat_comfort:
-                C_z = float(cat_comfort[z])
-                delta_comfort = C_z - T_base
+                delta_comfort = float(cat_comfort[z]) - T_base
                 clamped_delta = max(-3.0, min(5.0, delta_comfort))
                 T_final = T_base + clamped_delta
-                if abs(clamped_delta) > 0.1:
-                    warnings.append(f"🎯 Зона '{ZONES_RU.get(z, z)}' скорректирована по эталону.")
+                if abs(clamped_delta) > 0.1: warnings.append(f"🎯 Зона '{ZONES_RU.get(z, z)}' скорректирована по эталону.")
 
         data['T_final'] = T_final
         raw_deltas[z] = data['G'] - T_final
 
-    # ==========================================
-    # 5. КОМПЕНСАЦИИ
-    # ==========================================
     eff_deltas = raw_deltas.copy()
     if 'sleeve' in eff_deltas and 'shoulders' in raw_deltas:
         if raw_deltas['shoulders'] > 0: eff_deltas['sleeve'] += raw_deltas['shoulders'] * 0.7
             
-    if 'length_top' in eff_deltas and 'high_hip' in raw_deltas:
-        if raw_deltas['high_hip'] < 0:
-            stretch_loss = abs(raw_deltas['high_hip']) * (0.7 if elastane < 2 else 0.4)
+    if 'length_top' in eff_deltas and 'belly' in raw_deltas:
+        if raw_deltas['belly'] < 0:
+            stretch_loss = abs(raw_deltas['belly']) * (0.7 if elastane < 2 else 0.4)
             eff_deltas['length_top'] -= stretch_loss
 
-    # ==========================================
-    # 6. HARD GATE И АСИММЕТРИЧНЫЙ СКОРИНГ
-    # ==========================================
     for z, data in zones_to_check.items():
         B, G, T = data['B'], data['G'], data['T_final']
         delta_eff = eff_deltas[z]
@@ -249,11 +196,8 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
             hard_fit_status = "FAIL"
             warnings.append(f"Критично мало: {ZONES_RU.get(z, z)} (Вещь: {G:.1f}см, Тело: {B:.1f}см)")
 
-        penalty = 0.0
-        status_txt = "Идеально"
-        
-        tol_strict = 1.0
-        tol_loose = 2.5 if elastane >= 2 else 1.5
+        penalty = 0.0; status_txt = "Идеально"
+        tol_strict = 1.0; tol_loose = 2.5 if elastane >= 2 else 1.5
         
         neg_penalty_mult = 5.0
         if stiffness == 'stiff': neg_penalty_mult = 6.5
@@ -288,9 +232,7 @@ def calculate_single_size(user_flat: dict, user_profile: Profile, model_size: st
 def evaluate_all_sizes(user: Profile, theory: dict, available_sizes: List[str]) -> Dict[str, Any]:
     user_flat = user.to_flat_half()
     model_size = theory.get('model_size', 'M')
-    results = []
-    best_score = -1.0
-    best_size = None
+    results = []; best_score = -1.0; best_size = None
     
     for size in SIZES_ORDER:
         is_avail = size.upper() in [s.upper() for s in available_sizes]

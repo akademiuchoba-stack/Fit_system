@@ -1,341 +1,501 @@
 (() => {
+  // Robust Builder script that works when some optional fields are absent in the HTML.
+  // Fixes:
+  //  - No crash if element is missing (e.g. platform input absent in builder.html)
+  //  - "Save theory" shows message and actually saves
+  //  - "Save measurements" (ground_truth) sends base fields too (name/price/images) so card is not SKU-only
+  //  - Feedback works even if currentGarment wasn't loaded yet (tries to load by SKU)
+
   let currentGarment = null;
   let groundTruthData = {};
 
-  const el = {
-    msg: document.getElementById('msg'),
-    skuDisplay: document.getElementById('current-sku-display'),
-    btnTheory: document.getElementById('tab-btn-theory'),
-    btnPractice: document.getElementById('tab-btn-practice'),
-    tabTheory: document.getElementById('tab-theory'),
-    tabPractice: document.getElementById('tab-practice'),
+  // ---------- DOM helpers ----------
+  const $ = (id) => document.getElementById(id);
 
-    sku: document.getElementById('sku'), price: document.getElementById('price'), name: document.getElementById('name'),
-    imgFront: document.getElementById('img_front'), imgBack: document.getElementById('img_back'),
-    catType: document.getElementById('cat_type'), fitProfile: document.getElementById('fit_profile'),
-    stiffnessClass: document.getElementById('stiffness_class'), elastane: document.getElementById('elastane'),
-    platform: document.getElementById('platform'),
-    
-    wrapSleeve: document.getElementById('wrap_sleeve_type'),
-    wrapLeg: document.getElementById('wrap_leg_type'),
-    wrapRise: document.getElementById('wrap_rise_class'),
-    theoryTopFields: document.getElementById('theory_top_fields'),
-    theoryBotFields: document.getElementById('theory_bot_fields'),
-    gtTopFields: document.getElementById('gt_top_fields'),
-    gtBotFields: document.getElementById('gt_bot_fields'),
-
-    sleeveType: document.getElementById('sleeve_type'), legType: document.getElementById('leg_type'), riseClass: document.getElementById('rise_class'),
-    
-    gShoulders: document.getElementById('g_shoulders'), gBackWidth: document.getElementById('g_back_width'),
-    gChest: document.getElementById('g_chest'), gWaistTop: document.getElementById('g_waist_top'),
-    gHemTop: document.getElementById('g_hem_top'), gBicep: document.getElementById('g_bicep'),
-    gSleeve: document.getElementById('g_sleeve'), gLength: document.getElementById('g_length'),
-    gWaistBot: document.getElementById('g_waist_bot'), gBelly: document.getElementById('g_belly'),
-    gHips: document.getElementById('g_hips'), gThigh: document.getElementById('g_thigh'),
-    gKnee: document.getElementById('g_knee'), gLegOpening: document.getElementById('g_leg_opening'),
-    gFrontRise: document.getElementById('g_front_rise'), gBackRise: document.getElementById('g_back_rise'),
-    gInseam: document.getElementById('g_inseam'), gOutseam: document.getElementById('g_outseam'),
-
-    mSize: document.getElementById('m_size'), mHeight: document.getElementById('m_height'),
-    mChest: document.getElementById('m_chest'), mWaist: document.getElementById('m_waist'), mHips: document.getElementById('m_hips'),
-    btnSaveTheory: document.getElementById('btn-save-theory'),
-
-    gtSize: document.getElementById('gt_size'),
-    gtShoulders: document.getElementById('gt_shoulders'), gtBackWidth: document.getElementById('gt_back_width'),
-    gtChest: document.getElementById('gt_chest'), gtWaistTop: document.getElementById('gt_waist_top'),
-    gtHemTop: document.getElementById('gt_hem_top'), gtBicep: document.getElementById('gt_bicep'),
-    gtSleeve: document.getElementById('gt_sleeve'), gtLengthTop: document.getElementById('gt_length_top'),
-    gtWaistBot: document.getElementById('gt_waist_bot'), gtBelly: document.getElementById('gt_belly'),
-    gtHips: document.getElementById('gt_hips'), gtThigh: document.getElementById('gt_thigh'),
-    gtKnee: document.getElementById('gt_knee'), gtLegOpening: document.getElementById('gt_leg_opening'),
-    gtFrontRise: document.getElementById('gt_front_rise'), gtBackRise: document.getElementById('gt_back_rise'),
-    gtInseam: document.getElementById('gt_inseam'), gtOutseam: document.getElementById('gt_outseam'),
-    btnAddGt: document.getElementById('btn-add-gt'), gtList: document.getElementById('gt_list'),
-
-    fbProfile: document.getElementById('fb_profile'), fbSize: document.getElementById('fb_size'),
-    fbPointZero: document.getElementById('fb_point_zero'), btnSaveFb: document.getElementById('btn-save-fb'),
-    analysisResult: document.getElementById('analysis-result'), resTheory: document.getElementById('res-theory'),
-    resGt: document.getElementById('res-gt'), resVerdict: document.getElementById('res-verdict')
+  const getVal = (id, def = "") => {
+    const e = $(id);
+    return e ? (e.value ?? def) : def;
   };
 
-  function showMsg(text, isError=false) {
+  const setText = (id, v) => {
+    const e = $(id);
+    if (e) e.textContent = (v ?? "");
+  };
+
+  // Parse numbers, supports comma decimals "92,5"
+  const num = (v) => {
+    const s = String(v ?? "").trim().replace(",", ".");
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // ---------- Required elements ----------
+  const el = {
+    msg: $("msg"),
+    skuDisplay: $("current-sku-display"),
+    btnTheory: $("tab-btn-theory"),
+    btnPractice: $("tab-btn-practice"),
+    tabTheory: $("tab-theory"),
+    tabPractice: $("tab-practice"),
+
+    // identification
+    sku: $("sku"),
+    price: $("price"),
+    name: $("name"),
+    imgFront: $("img_front"),
+    imgBack: $("img_back"),
+
+    // theory blocks
+    catType: $("cat_type"),
+    fitProfile: $("fit_profile"),
+    stiffnessClass: $("stiffness_class"),
+    elastane: $("elastane"),
+    wrapSleeve: $("wrap_sleeve_type"),
+    wrapLeg: $("wrap_leg_type"),
+    wrapRise: $("wrap_rise_class"),
+    theoryTopFields: $("theory_top_fields"),
+    theoryBotFields: $("theory_bot_fields"),
+    gtTopFields: $("gt_top_fields"),
+    gtBotFields: $("gt_bot_fields"),
+
+    sleeveType: $("sleeve_type"),
+    legType: $("leg_type"),
+    riseClass: $("rise_class"),
+
+    gShoulders: $("g_shoulders"),
+    gBackWidth: $("g_back_width"),
+    gChest: $("g_chest"),
+    gWaistTop: $("g_waist_top"),
+    gHemTop: $("g_hem_top"),
+    gBicep: $("g_bicep"),
+    gSleeve: $("g_sleeve"),
+    gLength: $("g_length"),
+    gWaistBot: $("g_waist_bot"),
+    gBelly: $("g_belly"),
+    gHips: $("g_hips"),
+    gThigh: $("g_thigh"),
+    gKnee: $("g_knee"),
+    gLegOpening: $("g_leg_opening"),
+    gFrontRise: $("g_front_rise"),
+    gBackRise: $("g_back_rise"),
+    gInseam: $("g_inseam"),
+    gOutseam: $("g_outseam"),
+
+    mSize: $("m_size"),
+    mHeight: $("m_height"),
+    mChest: $("m_chest"),
+    mWaist: $("m_waist"),
+    mHips: $("m_hips"),
+
+    btnSaveTheory: $("btn-save-theory"),
+
+    // ground truth
+    gtSize: $("gt_size"),
+    btnAddGt: $("btn-add-gt"),
+    gtList: $("gt_list"),
+
+    // feedback
+    fbProfile: $("fb_profile"),
+    fbSize: $("fb_size"),
+    fbPointZero: $("fb_point_zero"),
+    btnSaveFb: $("btn-save-fb"),
+
+    analysisResult: $("analysis-result"),
+    resTheory: $("res-theory"),
+    resGt: $("res-gt"),
+    resVerdict: $("res-verdict"),
+  };
+
+  function showMsg(text, isError = false) {
+    if (!el.msg) return;
     el.msg.textContent = text;
-    el.msg.className = `mb-4 p-3 rounded-2xl text-white text-sm shadow-lg fixed top-5 right-5 z-50 ${isError ? 'bg-red-600' : 'bg-green-600'}`;
-    el.msg.classList.remove('hidden');
-    setTimeout(() => el.msg.classList.add('hidden'), 3000);
+    el.msg.className = `mb-4 p-3 rounded-2xl text-white text-sm shadow-lg fixed top-5 right-5 z-50 ${
+      isError ? "bg-red-600" : "bg-green-600"
+    }`;
+    el.msg.classList.remove("hidden");
+    setTimeout(() => el.msg.classList.add("hidden"), 3200);
   }
 
   function toggleCatFields() {
-    const cat = el.catType.value;
-    if (cat === 'top' || cat === 'full') {
-      el.wrapSleeve.classList.remove('hidden'); el.theoryTopFields.classList.remove('hidden'); el.gtTopFields.classList.remove('hidden');
-    } else {
-      el.wrapSleeve.classList.add('hidden'); el.theoryTopFields.classList.add('hidden'); el.gtTopFields.classList.add('hidden');
-    }
+    const cat = el.catType ? el.catType.value : "top";
 
-    if (cat === 'bottom' || cat === 'full') {
-      el.wrapLeg.classList.remove('hidden'); el.wrapRise.classList.remove('hidden'); el.theoryBotFields.classList.remove('hidden'); el.gtBotFields.classList.remove('hidden');
-    } else {
-      el.wrapLeg.classList.add('hidden'); el.wrapRise.classList.add('hidden'); el.theoryBotFields.classList.add('hidden'); el.gtBotFields.classList.add('hidden');
-    }
+    const showTop = (cat === "top" || cat === "full");
+    const showBot = (cat === "bottom" || cat === "full");
+
+    if (el.wrapSleeve) el.wrapSleeve.classList.toggle("hidden", !showTop);
+    if (el.theoryTopFields) el.theoryTopFields.classList.toggle("hidden", !showTop);
+    if (el.gtTopFields) el.gtTopFields.classList.toggle("hidden", !showTop);
+
+    if (el.wrapLeg) el.wrapLeg.classList.toggle("hidden", !showBot);
+    if (el.wrapRise) el.wrapRise.classList.toggle("hidden", !showBot);
+    if (el.theoryBotFields) el.theoryBotFields.classList.toggle("hidden", !showBot);
+    if (el.gtBotFields) el.gtBotFields.classList.toggle("hidden", !showBot);
   }
 
   function switchTab(tab) {
-    if (tab === 'theory') {
-      el.tabTheory.classList.remove('hidden'); el.tabPractice.classList.add('hidden');
-      el.btnTheory.className = 'flex-1 py-2.5 rounded-xl font-black text-sm transition shadow-sm bg-white text-gray-900';
-      el.btnPractice.className = 'flex-1 py-2.5 rounded-xl font-black text-sm text-gray-500 transition hover:text-gray-900';
+    if (!el.tabTheory || !el.tabPractice || !el.btnTheory || !el.btnPractice) return;
+    if (tab === "theory") {
+      el.tabTheory.classList.remove("hidden");
+      el.tabPractice.classList.add("hidden");
+      el.btnTheory.className = "flex-1 py-2.5 rounded-xl font-black text-sm transition shadow-sm bg-white text-gray-900";
+      el.btnPractice.className = "flex-1 py-2.5 rounded-xl font-black text-sm text-gray-500 transition hover:text-gray-900";
     } else {
-      el.tabTheory.classList.add('hidden'); el.tabPractice.classList.remove('hidden');
-      el.btnPractice.className = 'flex-1 py-2.5 rounded-xl font-black text-sm transition shadow-sm bg-white text-gray-900';
-      el.btnTheory.className = 'flex-1 py-2.5 rounded-xl font-black text-sm text-gray-500 transition hover:text-gray-900';
+      el.tabTheory.classList.add("hidden");
+      el.tabPractice.classList.remove("hidden");
+      el.btnPractice.className = "flex-1 py-2.5 rounded-xl font-black text-sm transition shadow-sm bg-white text-gray-900";
+      el.btnTheory.className = "flex-1 py-2.5 rounded-xl font-black text-sm text-gray-500 transition hover:text-gray-900";
     }
   }
 
   async function api(url, options = {}) {
-    const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+    const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...options });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'API Error');
+    if (!res.ok) throw new Error(data.detail || `API error (${res.status})`);
     return data;
   }
 
-  // Парсит числа с запятой ("92,5") и пустые строки
-  function num(v) {
-    const s = String(v ?? '').trim().replace(',', '.');
-    if (!s) return null;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
+  function getSkuFromUrl() {
+    return new URL(window.location.href).searchParams.get("sku") || "";
   }
 
-  function getSkuFromUrl() { return new URL(window.location.href).searchParams.get("sku") || ""; }
-
   async function loadProfiles() {
+    if (!el.fbProfile) return;
     try {
-      const profiles = await api('/api/profiles');
-      el.fbProfile.innerHTML = '<option value="">-- Выбери профиль --</option>' + 
-        profiles.map(p => `<option value="${p.id}">${p.name} (${p.height}см)</option>`).join('');
-    } catch (e) {}
+      const profiles = await api("/api/profiles");
+      el.fbProfile.innerHTML =
+        '<option value="">-- Выбери профиль --</option>' +
+        profiles.map((p) => `<option value="${p.id}">${p.name} (${p.height}см)</option>`).join("");
+    } catch (_) {
+      // ignore
+    }
   }
 
   function populateForm(g) {
     currentGarment = g;
-    el.skuDisplay.textContent = g.sku || 'Новый товар';
-    el.sku.value = g.sku || ''; el.name.value = g.name || ''; el.price.value = g.price || '';
-    el.imgFront.value = g.image_url || ''; el.imgBack.value = g.image_url_back || ''; el.platform.value = g.platform || 'manual';
+    setText("current-sku-display", g?.sku || "Новый товар");
 
-    const theory = (g.metrics || {}).theory || {};
-    groundTruthData = (g.metrics || {}).ground_truth || {};
+    if (el.sku) el.sku.value = g?.sku || "";
+    if (el.name) el.name.value = g?.name || "";
+    if (el.price) el.price.value = (g?.price ?? "");
+    if (el.imgFront) el.imgFront.value = g?.image_url || "";
+    if (el.imgBack) el.imgBack.value = g?.image_url_back || "";
 
-    el.catType.value = theory.category_type || 'top';
-    el.fitProfile.value = theory.fit_profile || 'regular';
-    el.stiffnessClass.value = theory.stiffness_class || 'medium';
-    el.elastane.value = theory.elastane_pct || 0;
-    
-    el.sleeveType.value = theory.sleeve_type || 'long';
-    el.legType.value = theory.leg_type || 'long';
-    el.riseClass.value = theory.rise_class || 'mid';
-    
-    el.gShoulders.value = theory.g_shoulders || ''; el.gBackWidth.value = theory.g_back_width || '';
-    el.gChest.value = theory.g_chest || ''; el.gWaistTop.value = theory.g_waist_top || '';
-    el.gHemTop.value = theory.g_hem_top || ''; el.gBicep.value = theory.g_bicep || '';
-    el.gSleeve.value = theory.g_sleeve || ''; el.gLength.value = theory.g_length || '';
-    
-    el.gWaistBot.value = theory.g_waist_bot || ''; el.gBelly.value = theory.g_belly || '';
-    el.gHips.value = theory.g_hips || ''; el.gThigh.value = theory.g_thigh || '';
-    el.gKnee.value = theory.g_knee || ''; el.gLegOpening.value = theory.g_leg_opening || '';
-    el.gFrontRise.value = theory.g_front_rise || ''; el.gBackRise.value = theory.g_back_rise || '';
-    el.gInseam.value = theory.g_inseam || ''; el.gOutseam.value = theory.g_outseam || '';
+    const theory = (g?.metrics || {}).theory || {};
+    groundTruthData = (g?.metrics || {}).ground_truth || {};
 
-    el.mSize.value = theory.model_size || ''; el.mHeight.value = theory.height || '';
-    el.mChest.value = theory.chest || ''; el.mWaist.value = theory.waist || ''; el.mHips.value = theory.hips || '';
+    if (el.catType) el.catType.value = theory.category_type || "top";
+    if (el.fitProfile) el.fitProfile.value = theory.fit_profile || "regular";
+    if (el.stiffnessClass) el.stiffnessClass.value = theory.stiffness_class || "medium";
+    if (el.elastane) el.elastane.value = (theory.elastane_pct ?? 0);
+
+    if (el.sleeveType) el.sleeveType.value = theory.sleeve_type || "long";
+    if (el.legType) el.legType.value = theory.leg_type || "long";
+    if (el.riseClass) el.riseClass.value = theory.rise_class || "mid";
+
+    // garment measurements (theory)
+    const map = [
+      ["gShoulders", "g_shoulders"], ["gBackWidth", "g_back_width"],
+      ["gChest", "g_chest"], ["gWaistTop", "g_waist_top"],
+      ["gHemTop", "g_hem_top"], ["gBicep", "g_bicep"],
+      ["gSleeve", "g_sleeve"], ["gLength", "g_length"],
+      ["gWaistBot", "g_waist_bot"], ["gBelly", "g_belly"],
+      ["gHips", "g_hips"], ["gThigh", "g_thigh"],
+      ["gKnee", "g_knee"], ["gLegOpening", "g_leg_opening"],
+      ["gFrontRise", "g_front_rise"], ["gBackRise", "g_back_rise"],
+      ["gInseam", "g_inseam"], ["gOutseam", "g_outseam"],
+    ];
+    for (const [key, tkey] of map) {
+      if (el[key]) el[key].value = (theory[tkey] ?? "");
+    }
+
+    if (el.mSize) el.mSize.value = theory.model_size || "";
+    if (el.mHeight) el.mHeight.value = (theory.height ?? "");
+    if (el.mChest) el.mChest.value = (theory.chest ?? "");
+    if (el.mWaist) el.mWaist.value = (theory.waist ?? "");
+    if (el.mHips) el.mHips.value = (theory.hips ?? "");
 
     toggleCatFields();
     renderGtList();
   }
 
-  async function init() {
-    switchTab('theory');
-    el.btnTheory.addEventListener('click', () => switchTab('theory'));
-    el.btnPractice.addEventListener('click', () => switchTab('practice'));
-    el.catType.addEventListener('change', toggleCatFields);
-
-    // АВТО-ПОДГРУЗКА ПРИ ВВОДЕ SKU
-    el.sku.addEventListener('change', async () => {
-        const val = el.sku.value.trim();
-        if (val) {
-            try {
-                const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(val)}`);
-                populateForm(data);
-                showMsg("Данные вещи загружены из базы!");
-            } catch (e) {
-                // Это новая вещь, ничего не делаем
-            }
-        }
-    });
-
-    await loadProfiles();
-    const sku = getSkuFromUrl();
-    if (sku) {
-      try { const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(sku)}`); populateForm(data); } 
-      catch (e) { toggleCatFields(); }
-    } else { toggleCatFields(); }
-  }
-
-  el.btnSaveTheory.addEventListener('click', async () => {
-    const sku = el.sku.value.trim();
-    if (!sku) return showMsg("SKU обязателен!", true);
-
-    const payload = {
-      sku, name: el.name.value.trim(), price: num(el.price.value),
-      image_url: el.imgFront.value.trim(), image_url_back: el.imgBack.value.trim(), platform: el.platform.value,
-      theory: {
-        category_type: el.catType.value, fit_profile: el.fitProfile.value,
-        stiffness_class: el.stiffnessClass.value, elastane_pct: num(el.elastane.value) || 0,
-        sleeve_type: el.sleeveType.value, leg_type: el.legType.value, rise_class: el.riseClass.value,
-        
-        g_shoulders: num(el.gShoulders.value), g_back_width: num(el.gBackWidth.value),
-        g_chest: num(el.gChest.value), g_waist_top: num(el.gWaistTop.value),
-        g_hem_top: num(el.gHemTop.value), g_bicep: num(el.gBicep.value),
-        g_sleeve: num(el.gSleeve.value), g_length: num(el.gLength.value),
-        g_waist_bot: num(el.gWaistBot.value), g_belly: num(el.gBelly.value),
-        g_hips: num(el.gHips.value), g_thigh: num(el.gThigh.value),
-        g_knee: num(el.gKnee.value), g_leg_opening: num(el.gLegOpening.value),
-        g_front_rise: num(el.gFrontRise.value), g_back_rise: num(el.gBackRise.value),
-        g_inseam: num(el.gInseam.value), g_outseam: num(el.gOutseam.value),
-
-        model_size: el.mSize.value.trim(), height: num(el.mHeight.value),
-        chest: num(el.mChest.value), waist: num(el.mWaist.value), hips: num(el.mHips.value),
-      }
-    };
-
+  async function tryLoadGarmentBySku() {
+    const sku = (el.sku ? el.sku.value : "").trim();
+    if (!sku) return null;
     try {
-      const resp = await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
-      showMsg("Теория успешно сохранена!");
-      if (resp?.item) {
-        populateForm(resp.item);
-      } else {
-        el.skuDisplay.textContent = sku;
-        if (!currentGarment) currentGarment = { id: 999, metrics: {theory: payload.theory} };
-        else currentGarment.metrics.theory = payload.theory;
-      }
-    } catch (e) { showMsg(e.message, true); }
-  });
-
-  function renderGtList() {
-    const sizes = Object.keys(groundTruthData);
-    if (!sizes.length) { el.gtList.innerHTML = '<div class="text-xs text-gray-400">Пока нет замеров.</div>'; return; }
-    el.gtList.innerHTML = sizes.map(size => {
-      const d = groundTruthData[size];
-      return `<div class="p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm flex justify-between items-center">
-        <div class="truncate w-[90%]"><strong class="text-indigo-600">Размер ${size}</strong>: ${JSON.stringify(d).replace(/[{""}]/g,'')}</div>
-        <button onclick="deleteGt('${size}')" class="text-red-500 font-bold text-xs ml-2 px-2 py-1 bg-red-50 rounded hover:bg-red-100">X</button>
-      </div>`;
-    }).join('');
-  }
-
-  window.deleteGt = async function(size) {
-    delete groundTruthData[size]; renderGtList(); await saveGroundTruthOnly();
-  };
-
-  el.btnAddGt.addEventListener('click', async () => {
-    const sku = el.sku.value.trim();
-    if (!sku) return showMsg("Сначала сохрани теорию!", true);
-    const size = el.gtSize.value.trim().toUpperCase();
-    if (!size) return showMsg("Укажи размер (Например L)!", true);
-
-    const m = {};
-    const extract = (id, key) => {
-      const val = num(document.getElementById(id).value);
-      if (val !== null) m[key] = val;
-    };
-    
-    extract('gt_shoulders', 'shoulders'); extract('gt_back_width', 'back_width');
-    extract('gt_chest', 'chest'); extract('gt_waist_top', 'waist_top'); extract('gt_hem_top', 'hem_top');
-    extract('gt_bicep', 'bicep'); extract('gt_sleeve', 'sleeve'); extract('gt_length_top', 'length_top');
-    
-    extract('gt_waist_bot', 'waist_bottom'); extract('gt_belly', 'belly'); extract('gt_hips', 'hips');
-    extract('gt_thigh', 'thigh'); extract('gt_knee', 'knee'); extract('gt_leg_opening', 'leg_opening');
-    extract('gt_front_rise', 'front_rise'); extract('gt_back_rise', 'back_rise');
-    extract('gt_inseam', 'inseam'); extract('gt_outseam', 'outseam');
-
-    if (Object.keys(m).length === 0) return showMsg("Введи хотя бы один замер!", true);
-    groundTruthData[size] = m;
-    
-    document.querySelectorAll('#gt_top_fields input, #gt_bot_fields input').forEach(i => i.value = '');
-    el.gtSize.value = '';
-    
-    renderGtList(); await saveGroundTruthOnly();
-  });
-
-  async function saveGroundTruthOnly() {
-    const sku = el.sku.value.trim(); if (!sku) return;
-    try {
-      // ✅ ВАЖНО: отправляем базовые поля тоже, иначе в базе будет "SKU-only" карточка
-      const payload = {
-        sku,
-        name: (el.name.value || '').trim(),
-        platform: el.platform.value || 'manual',
-        price: num(el.price.value),
-        image_url: (el.imgFront.value || '').trim(),
-        image_url_back: (el.imgBack.value || '').trim(),
-        ground_truth: groundTruthData
-      };
-      const resp = await api('/api/admin/builder/upsert', { method: 'POST', body: JSON.stringify(payload) });
-      showMsg("Замер добавлен!");
-      if (resp?.item) populateForm(resp.item);
-    } catch (e) {
-      showMsg(e.message, true);
+      const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(sku)}`);
+      populateForm(data);
+      return data;
+    } catch (_) {
+      return null;
     }
   }
 
-  el.btnSaveFb.addEventListener('click', async () => {
-    if (!currentGarment || !currentGarment.id) return showMsg("Сначала сохрани товар!", true);
-    const userId = el.fbProfile.value; if (!userId) return showMsg("Выбери профиль!", true);
-    const sizeSelected = el.fbSize.value.trim().toUpperCase(); if (!sizeSelected) return showMsg("Укажи размер!", true);
+  // ---------- Ground truth list ----------
+  function renderGtList() {
+    if (!el.gtList) return;
+    const sizes = Object.keys(groundTruthData || {});
+    if (!sizes.length) {
+      el.gtList.innerHTML = '<div class="text-xs text-gray-400">Пока нет замеров.</div>';
+      return;
+    }
+    el.gtList.innerHTML = sizes
+      .map((size) => {
+        const d = groundTruthData[size];
+        return `<div class="p-3 bg-gray-50 border border-gray-100 rounded-xl text-sm flex justify-between items-center">
+          <div class="truncate w-[90%]"><strong class="text-indigo-600">Размер ${size}</strong>: ${JSON.stringify(d).replace(/[{""}]/g, "")}</div>
+          <button data-del-size="${size}" class="text-red-500 font-bold text-xs ml-2 px-2 py-1 bg-red-50 rounded hover:bg-red-100">X</button>
+        </div>`;
+      })
+      .join("");
+
+    // attach handlers
+    el.gtList.querySelectorAll("button[data-del-size]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const size = btn.getAttribute("data-del-size");
+        if (!size) return;
+        delete groundTruthData[size];
+        renderGtList();
+        try {
+          await saveGroundTruth();
+          showMsg("Замер удалён!");
+        } catch (e) {
+          showMsg(e.message || "Ошибка при удалении замера", true);
+        }
+      });
+    });
+  }
+
+  async function saveGroundTruth() {
+    const sku = (el.sku ? el.sku.value : "").trim();
+    if (!sku) {
+      showMsg("SKU обязателен!", true);
+      return;
+    }
+
+    // platform field may not exist in HTML -> default
+    const platform = getVal("platform", "manual");
 
     const payload = {
-      garment_id: currentGarment.id, user_id: userId, size_selected: sizeSelected,
-      is_point_zero: el.fbPointZero.checked, fit_matrix: null
+      sku,
+      // send base fields too to prevent SKU-only cards
+      name: (el.name ? el.name.value : "").trim(),
+      price: num(el.price ? el.price.value : null),
+      image_url: (el.imgFront ? el.imgFront.value : "").trim(),
+      image_url_back: (el.imgBack ? el.imgBack.value : "").trim(),
+      platform,
+      ground_truth: groundTruthData,
     };
 
-    try {
-      const data = await api('/api/feedback', { method: 'POST', body: JSON.stringify(payload) });
-      showMsg("Примерка отправлена!");
-      
-      if(data.analysis) {
-        el.analysisResult.classList.remove('hidden');
-        el.resTheory.textContent = data.analysis.theory_size ? `${data.analysis.theory_size} (${data.analysis.theory_score}%)` : 'Нет данных';
-        el.resGt.textContent = data.analysis.gt_size ? `${data.analysis.gt_size} (${data.analysis.gt_score}%)` : 'Нет данных';
-        
-        if (data.analysis.match === true) {
-            el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-green-100 text-green-800";
-            el.resVerdict.textContent = "Совпадение! Данные магазина верны.";
-        } else if (data.analysis.match === false) {
-            el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-red-100 text-red-800";
-            el.resVerdict.textContent = `Ошибка магазина! Реальный размер: ${data.analysis.gt_size}`;
-        } else {
-            el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-gray-100 text-gray-800";
-            el.resVerdict.textContent = "Недостаточно данных для сравнения.";
-        }
+    const resp = await api("/api/admin/builder/upsert", { method: "POST", body: JSON.stringify(payload) });
+    if (resp?.item) populateForm(resp.item);
+  }
 
-        let xrayHtml = `<div class="mt-4 border-t border-indigo-200/50 pt-4"><h4 class="text-[11px] uppercase tracking-widest text-indigo-500 font-extrabold mb-3">Рентген по данным сайта:</h4><div class="space-y-3">`;
-        (data.analysis.xray || []).forEach(sz => {
-            xrayHtml += `
-            <div class="bg-white p-2 rounded-xl border ${sz.hard_fit === 'FAIL' ? 'border-red-200 opacity-60' : 'border-indigo-100'} text-xs">
-                <div class="font-black mb-1 text-gray-800 border-b border-gray-100 pb-1">Размер ${sz.size_label} <span class="font-bold ${sz.hard_fit === 'FAIL' ? 'text-red-500' : 'text-indigo-600'} float-right">${Math.round(sz.score)}%</span></div>
-                ${sz.xray_zones.map(z => `<div class="flex justify-between py-0.5"><span class="text-gray-500">${z.zone_name}</span> <span class="font-bold ${z.penalty > 0 ? 'text-red-500' : 'text-green-600'}">${z.status}</span></div>`).join('')}
-            </div>`;
-        });
-        xrayHtml += `</div></div>`;
-        
-        let existingXray = document.getElementById('builder-xray');
-        if (existingXray) existingXray.remove();
-        let xrayContainer = document.createElement('div');
-        xrayContainer.id = 'builder-xray'; xrayContainer.innerHTML = xrayHtml;
-        el.resVerdict.parentNode.appendChild(xrayContainer);
+  // ---------- Init ----------
+  async function init() {
+    switchTab("theory");
+
+    if (el.btnTheory) el.btnTheory.addEventListener("click", () => switchTab("theory"));
+    if (el.btnPractice) el.btnPractice.addEventListener("click", () => switchTab("practice"));
+    if (el.catType) el.catType.addEventListener("change", toggleCatFields);
+
+    // Auto-load by SKU when changed
+    if (el.sku) {
+      el.sku.addEventListener("change", async () => {
+        const val = el.sku.value.trim();
+        if (!val) return;
+        const g = await tryLoadGarmentBySku();
+        if (g) showMsg("Данные вещи загружены из базы!");
+      });
+    }
+
+    await loadProfiles();
+
+    const sku = getSkuFromUrl();
+    if (sku && el.sku) el.sku.value = sku;
+
+    if (sku) {
+      const g = await tryLoadGarmentBySku();
+      if (!g) toggleCatFields();
+    } else {
+      toggleCatFields();
+    }
+  }
+
+  // ---------- Save Theory ----------
+  if (el.btnSaveTheory) {
+    el.btnSaveTheory.addEventListener("click", async () => {
+      const sku = (el.sku ? el.sku.value : "").trim();
+      if (!sku) return showMsg("SKU обязателен!", true);
+
+      const platform = getVal("platform", "manual");
+
+      const payload = {
+        sku,
+        name: (el.name ? el.name.value : "").trim(),
+        price: num(el.price ? el.price.value : null),
+        image_url: (el.imgFront ? el.imgFront.value : "").trim(),
+        image_url_back: (el.imgBack ? el.imgBack.value : "").trim(),
+        platform,
+        theory: {
+          category_type: el.catType ? el.catType.value : "top",
+          fit_profile: el.fitProfile ? el.fitProfile.value : "regular",
+          stiffness_class: el.stiffnessClass ? el.stiffnessClass.value : "medium",
+          elastane_pct: num(el.elastane ? el.elastane.value : null) || 0,
+
+          sleeve_type: el.sleeveType ? el.sleeveType.value : "long",
+          leg_type: el.legType ? el.legType.value : "long",
+          rise_class: el.riseClass ? el.riseClass.value : "mid",
+
+          g_shoulders: num(getVal("g_shoulders", "")),
+          g_back_width: num(getVal("g_back_width", "")),
+          g_chest: num(getVal("g_chest", "")),
+          g_waist_top: num(getVal("g_waist_top", "")),
+          g_hem_top: num(getVal("g_hem_top", "")),
+          g_bicep: num(getVal("g_bicep", "")),
+          g_sleeve: num(getVal("g_sleeve", "")),
+          g_length: num(getVal("g_length", "")),
+
+          g_waist_bot: num(getVal("g_waist_bot", "")),
+          g_belly: num(getVal("g_belly", "")),
+          g_hips: num(getVal("g_hips", "")),
+          g_thigh: num(getVal("g_thigh", "")),
+          g_knee: num(getVal("g_knee", "")),
+          g_leg_opening: num(getVal("g_leg_opening", "")),
+          g_front_rise: num(getVal("g_front_rise", "")),
+          g_back_rise: num(getVal("g_back_rise", "")),
+          g_inseam: num(getVal("g_inseam", "")),
+          g_outseam: num(getVal("g_outseam", "")),
+
+          model_size: (el.mSize ? el.mSize.value : "").trim(),
+          height: num(el.mHeight ? el.mHeight.value : null),
+          chest: num(el.mChest ? el.mChest.value : null),
+          waist: num(el.mWaist ? el.mWaist.value : null),
+          hips: num(el.mHips ? el.mHips.value : null),
+        },
+      };
+
+      try {
+        const resp = await api("/api/admin/builder/upsert", { method: "POST", body: JSON.stringify(payload) });
+        showMsg("Теория успешно сохранена!");
+        if (resp?.item) populateForm(resp.item);
+        else await tryLoadGarmentBySku();
+      } catch (e) {
+        showMsg(e.message || "Ошибка сохранения", true);
+        console.error("SAVE THEORY ERROR:", e);
       }
-    } catch (e) { showMsg(e.message, true); }
-  });
+    });
+  }
+
+  // ---------- Add Ground Truth ----------
+  if (el.btnAddGt) {
+    el.btnAddGt.addEventListener("click", async () => {
+      const sku = (el.sku ? el.sku.value : "").trim();
+      if (!sku) return showMsg("SKU обязателен!", true);
+
+      const size = (el.gtSize ? el.gtSize.value : "").trim().toUpperCase();
+      if (!size) return showMsg("Укажи размер (например L)!", true);
+
+      const m = {};
+      const extract = (id, key) => {
+        const v = num(getVal(id, ""));
+        if (v !== null) m[key] = v;
+      };
+
+      // Top
+      extract("gt_shoulders", "shoulders");
+      extract("gt_back_width", "back_width");
+      extract("gt_chest", "chest");
+      extract("gt_waist_top", "waist_top");
+      extract("gt_hem_top", "hem_top");
+      extract("gt_bicep", "bicep");
+      extract("gt_sleeve", "sleeve");
+      extract("gt_length_top", "length_top");
+
+      // Bottom
+      extract("gt_waist_bot", "waist_bottom");
+      extract("gt_belly", "belly");
+      extract("gt_hips", "hips");
+      extract("gt_thigh", "thigh");
+      extract("gt_knee", "knee");
+      extract("gt_leg_opening", "leg_opening");
+      extract("gt_front_rise", "front_rise");
+      extract("gt_back_rise", "back_rise");
+      extract("gt_inseam", "inseam");
+      extract("gt_outseam", "outseam");
+
+      if (Object.keys(m).length === 0) return showMsg("Введи хотя бы один замер!", true);
+
+      groundTruthData[size] = m;
+
+      // clear inputs
+      document.querySelectorAll('#gt_top_fields input, #gt_bot_fields input').forEach((i) => (i.value = ""));
+      if (el.gtSize) el.gtSize.value = "";
+
+      renderGtList();
+
+      try {
+        await saveGroundTruth();
+        showMsg("Замер сохранён!");
+      } catch (e) {
+        showMsg(e.message || "Ошибка сохранения замера", true);
+      }
+    });
+  }
+
+  // ---------- Send Feedback ----------
+  if (el.btnSaveFb) {
+    el.btnSaveFb.addEventListener("click", async () => {
+      // Ensure we have garment id
+      if (!currentGarment || !currentGarment.id) {
+        await tryLoadGarmentBySku();
+      }
+      if (!currentGarment || !currentGarment.id) {
+        return showMsg("Сначала сохраните товар!", true);
+      }
+
+      const userId = el.fbProfile ? el.fbProfile.value : "";
+      if (!userId) return showMsg("Выбери профиль!", true);
+
+      const sizeSelected = (el.fbSize ? el.fbSize.value : "").trim().toUpperCase();
+      if (!sizeSelected) return showMsg("Укажи размер!", true);
+
+      const payload = {
+        garment_id: currentGarment.id,
+        user_id: userId,
+        size_selected: sizeSelected,
+        is_point_zero: !!(el.fbPointZero && el.fbPointZero.checked),
+        fit_matrix: null,
+      };
+
+      try {
+        const data = await api("/api/feedback", { method: "POST", body: JSON.stringify(payload) });
+        showMsg("Фидбек отправлен!");
+
+        if (data.analysis && el.analysisResult) {
+          el.analysisResult.classList.remove("hidden");
+          if (el.resTheory) el.resTheory.textContent = data.analysis.theory_size ? `${data.analysis.theory_size} (${data.analysis.theory_score}%)` : "Нет данных";
+          if (el.resGt) el.resGt.textContent = data.analysis.gt_size ? `${data.analysis.gt_size} (${data.analysis.gt_score}%)` : "Нет данных";
+
+          if (el.resVerdict) {
+            if (data.analysis.match === true) {
+              el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-green-100 text-green-800";
+              el.resVerdict.textContent = "Совпадение! Данные магазина верны.";
+            } else if (data.analysis.match === false) {
+              el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-red-100 text-red-800";
+              el.resVerdict.textContent = `Ошибка магазина! Реальный размер: ${data.analysis.gt_size}`;
+            } else {
+              el.resVerdict.className = "mt-3 p-3 rounded-xl font-bold text-center bg-gray-100 text-gray-800";
+              el.resVerdict.textContent = "Недостаточно данных для сравнения.";
+            }
+          }
+        }
+      } catch (e) {
+        showMsg(e.message || "Ошибка отправки фидбека", true);
+        console.error("SAVE FEEDBACK ERROR:", e);
+      }
+    });
+  }
 
   init();
 })();

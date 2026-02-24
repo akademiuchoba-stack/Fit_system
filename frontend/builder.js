@@ -16,7 +16,6 @@
     stiffnessClass: document.getElementById('stiffness_class'), elastane: document.getElementById('elastane'),
     platform: document.getElementById('platform'),
     
-    // Wrappers for visibility toggle
     wrapSleeve: document.getElementById('wrap_sleeve_type'),
     wrapLeg: document.getElementById('wrap_leg_type'),
     wrapRise: document.getElementById('wrap_rise_class'),
@@ -27,7 +26,6 @@
 
     sleeveType: document.getElementById('sleeve_type'), legType: document.getElementById('leg_type'), riseClass: document.getElementById('rise_class'),
     
-    // Theory Fields
     gShoulders: document.getElementById('g_shoulders'), gBackWidth: document.getElementById('g_back_width'),
     gChest: document.getElementById('g_chest'), gWaistTop: document.getElementById('g_waist_top'),
     gHemTop: document.getElementById('g_hem_top'), gBicep: document.getElementById('g_bicep'),
@@ -42,7 +40,6 @@
     mChest: document.getElementById('m_chest'), mWaist: document.getElementById('m_waist'), mHips: document.getElementById('m_hips'),
     btnSaveTheory: document.getElementById('btn-save-theory'),
 
-    // GT Fields
     gtSize: document.getElementById('gt_size'),
     gtShoulders: document.getElementById('gt_shoulders'), gtBackWidth: document.getElementById('gt_back_width'),
     gtChest: document.getElementById('gt_chest'), gtWaistTop: document.getElementById('gt_waist_top'),
@@ -153,6 +150,20 @@
     el.btnTheory.addEventListener('click', () => switchTab('theory'));
     el.btnPractice.addEventListener('click', () => switchTab('practice'));
     el.catType.addEventListener('change', toggleCatFields);
+
+    // АВТО-ПОДГРУЗКА ПРИ ВВОДЕ SKU
+    el.sku.addEventListener('change', async () => {
+        const val = el.sku.value.trim();
+        if (val) {
+            try {
+                const data = await api(`/api/admin/builder/get?sku=${encodeURIComponent(val)}`);
+                populateForm(data);
+                showMsg("Данные вещи загружены из базы!");
+            } catch (e) {
+                // Это новая вещь, ничего не делаем
+            }
+        }
+    });
 
     await loadProfiles();
     const sku = getSkuFromUrl();

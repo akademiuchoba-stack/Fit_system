@@ -7,17 +7,13 @@
   };
 
   const qs = (sel, root=document) => root.querySelector(sel);
-
   function show(el){ if(el) el.classList.remove('hidden'); }
   function hide(el){ if(el) el.classList.add('hidden'); }
   function esc(s){ return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function fmt(n){ const x = Number(n); return Number.isFinite(x) ? String(Math.round(x*10)/10) : '—'; }
 
   async function api(url, opts={}){
-    const res = await fetch(url, {
-      headers: {'Content-Type':'application/json', ...(opts.headers||{})},
-      ...opts
-    });
+    const res = await fetch(url, { headers: {'Content-Type':'application/json', ...(opts.headers||{})}, ...opts });
     if(!res.ok){
       const txt = await res.text().catch(()=> '');
       throw new Error(`${res.status} ${res.statusText}${txt?`: ${txt}`:''}`);
@@ -99,17 +95,8 @@
       await this.refreshResults();
     }
 
-    showCabinet(){
-      hide(this.el.mainView);
-      show(this.el.cabinetView);
-      this.renderProfiles();
-      this.clearForm();
-    }
-
-    showMain(){
-      hide(this.el.cabinetView);
-      show(this.el.mainView);
-    }
+    showCabinet(){ hide(this.el.mainView); show(this.el.cabinetView); this.renderProfiles(); this.clearForm(); }
+    showMain(){ hide(this.el.cabinetView); show(this.el.mainView); }
 
     setActiveProfile(id){
       this.state.activeProfileId = id;
@@ -122,9 +109,7 @@
       const list = await api(API.profiles);
       this.state.profiles = Array.isArray(list) ? list : [];
       const exists = this.state.activeProfileId && this.state.profiles.some(p=>p.id===this.state.activeProfileId);
-      if(!exists){
-        this.state.activeProfileId = this.state.profiles[0]?.id || null;
-      }
+      if(!exists) this.state.activeProfileId = this.state.profiles[0]?.id || null;
       this.setActiveProfile(this.state.activeProfileId);
     }
 
@@ -133,106 +118,88 @@
       this.el.profiles.innerHTML = '';
       const items = this.state.profiles;
 
-      if(!items.length){
-        show(this.el.profilesEmpty);
-        return;
-      }
+      if(!items.length) { show(this.el.profilesEmpty); return; }
       hide(this.el.profilesEmpty);
 
       for(const p of items){
         const isActive = p.id === this.state.activeProfileId;
         const row = document.createElement('div');
-        row.className = `p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition cursor-pointer`;
+        row.className = `p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50/50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition cursor-pointer`;
 
         row.innerHTML = `
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <div class="font-black truncate">${esc(p.name)}</div>
+                <div class="font-black text-lg truncate">${esc(p.name)}</div>
                 ${isActive ? `<span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-600 text-white">активен</span>` : ''}
               </div>
-              <div class="text-xs text-gray-600 mt-1">
-                Рост ${fmt(p.height)} • Г ${fmt(p.chest)} • Т ${fmt(p.waist)} • Б ${fmt(p.hips)} • ШШ ${fmt(p.inseam)}
-              </div>
+              <div class="text-xs text-gray-500 mt-1">Рост: ${fmt(p.height)}см | Грудь: ${fmt(p.chest)}см</div>
             </div>
           </div>
-
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button data-act="activate" class="px-3 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-800 transition">Выбрать</button>
-            <button data-act="edit" class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-100 transition">Изменить</button>
-            <button data-act="delete" class="px-3 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-rose-50 transition">Удалить</button>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button data-act="activate" class="px-4 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition shadow-sm">Выбрать</button>
+            <button data-act="edit" class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-50 transition shadow-sm">Изменить</button>
+            <button data-act="delete" class="px-4 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-rose-50 transition shadow-sm">Удалить</button>
           </div>
         `;
 
         row.addEventListener('click', (e)=> {
           const btn = e.target?.closest('button[data-act]');
-          if(!btn) {
-              this.setActiveProfile(p.id);
-              this.refreshResults().catch(()=>{});
-              return;
-          }
-          e.preventDefault();
-          e.stopPropagation();
+          if(!btn) { this.setActiveProfile(p.id); this.refreshResults().catch(()=>{}); return; }
+          e.preventDefault(); e.stopPropagation();
           const act = btn.getAttribute('data-act');
-          if(act==='activate'){
-            this.setActiveProfile(p.id);
-            this.toast(`Активен: ${p.name}`);
-            this.refreshResults().catch(()=>{});
-          } else if(act==='edit'){
-            this.loadProfileIntoForm(p);
-          } else if(act==='delete'){
-            if(confirm('Точно удалить профиль?')) {
-                this.deleteProfile(p.id).catch(err=> this.toast(err.message));
-            }
-          }
+          if(act==='activate'){ this.setActiveProfile(p.id); this.toast(`Активен: ${p.name}`); this.refreshResults().catch(()=>{}); }
+          else if(act==='edit'){ this.loadProfileIntoForm(p); }
+          else if(act==='delete'){ if(confirm('Удалить профиль?')) this.deleteProfile(p.id).catch(err=> this.toast(err.message)); }
         });
 
         this.el.profiles.appendChild(row);
       }
     }
 
-   loadProfileIntoForm(p){
+    loadProfileIntoForm(p){
       this.state.editProfileId = p.id;
       if(this.el.formTitle) this.el.formTitle.textContent = `Редактирование: ${p.name}`;
       const f = this.el.form;
       if(!f) return;
       
-      // Базовые данные
-      f.name.value = p.name ?? '';
-      f.gender.value = p.gender ?? 'male';
-      f.height.value = p.height ?? '';
-      f.chest.value = p.chest ?? '';
-      f.shoulders.value = p.shoulders ?? '';
-      f.waist.value = p.waist ?? '';
-      f.hips.value = p.hips ?? '';
-      f.arm_length.value = p.arm_length ?? '';
-      f.leg_length.value = p.leg_length ?? '';
-      f.inseam.value = p.inseam ?? '';
-      f.id.value = p.id ?? '';
+      f.name.value = p.name ?? ''; f.gender.value = p.gender ?? 'male'; f.height.value = p.height ?? '';
+      f.b_neck.value = p.neck ?? ''; f.b_shoulders.value = p.shoulders ?? ''; f.b_back_width.value = p.back_width ?? '';
+      f.b_chest.value = p.chest ?? ''; f.b_waist_top.value = p.waist_top ?? ''; f.b_bicep.value = p.bicep ?? ''; f.b_arm_length.value = p.arm_length ?? '';
+      f.b_waist_bottom.value = p.waist_bottom ?? ''; f.b_high_hip.value = p.high_hip ?? ''; f.b_hips.value = p.hips ?? '';
+      f.b_thigh.value = p.thigh ?? ''; f.b_knee.value = p.knee ?? ''; f.b_calf.value = p.calf ?? ''; 
+      f.b_outseam.value = p.leg_length ?? ''; f.b_inseam.value = p.inseam ?? ''; f.id.value = p.id ?? '';
 
-      // Проблемные зоны
       const pz = p.problem_zones || [];
       if(f.pz_shoulders) f.pz_shoulders.checked = pz.includes('shoulders');
+      if(f.pz_chest) f.pz_chest.checked = pz.includes('chest');
       if(f.pz_belly) f.pz_belly.checked = pz.includes('belly');
       if(f.pz_hips) f.pz_hips.checked = pz.includes('hips');
-      if(f.pz_arms) f.pz_arms.checked = pz.includes('arms');
+      if(f.pz_thigh) f.pz_thigh.checked = pz.includes('thigh');
+      if(f.pz_bicep) f.pz_bicep.checked = pz.includes('bicep');
 
-      // Эталонные вещи (Comfort_C)
       const c = p.comfort_C || {};
       if(c.top) {
-          f.c_top_chest.value = c.top.chest ?? '';
-          f.c_top_sleeve.value = c.top.sleeve ?? '';
+          f.c_top_shoulders.value = c.top.shoulders ?? ''; f.c_top_back.value = c.top.back_width ?? '';
+          f.c_top_chest.value = c.top.chest ?? ''; f.c_top_waist.value = c.top.waist_top ?? '';
+          f.c_top_hem.value = c.top.hem_top ?? ''; f.c_top_length.value = c.top.length_top ?? '';
+          f.c_top_sleeve.value = c.top.sleeve ?? ''; f.c_top_bicep.value = c.top.bicep ?? '';
       } else {
-          f.c_top_chest.value = ''; f.c_top_sleeve.value = '';
+          f.c_top_shoulders.value = ''; f.c_top_back.value = ''; f.c_top_chest.value = ''; f.c_top_waist.value = '';
+          f.c_top_hem.value = ''; f.c_top_length.value = ''; f.c_top_sleeve.value = ''; f.c_top_bicep.value = '';
       }
+      
       if(c.bottom) {
-          f.c_bot_waist.value = c.bottom.waist_bottom ?? '';
-          f.c_bot_hips.value = c.bottom.hips ?? '';
-          f.c_bot_inseam.value = c.bottom.inseam ?? '';
+          f.c_bot_waist.value = c.bottom.waist_bottom ?? ''; f.c_bot_high_hip.value = c.bottom.high_hip ?? '';
+          f.c_bot_hips.value = c.bottom.hips ?? ''; f.c_bot_thigh.value = c.bottom.thigh ?? '';
+          f.c_bot_knee.value = c.bottom.knee ?? ''; f.c_bot_opening.value = c.bottom.leg_opening ?? '';
+          f.c_bot_inseam.value = c.bottom.inseam ?? ''; f.c_bot_outseam.value = c.bottom.outseam ?? '';
+          f.c_bot_front_rise.value = c.bottom.front_rise ?? ''; f.c_bot_back_rise.value = c.bottom.back_rise ?? '';
       } else {
-          f.c_bot_waist.value = ''; f.c_bot_hips.value = ''; f.c_bot_inseam.value = '';
+          f.c_bot_waist.value = ''; f.c_bot_high_hip.value = ''; f.c_bot_hips.value = ''; f.c_bot_thigh.value = '';
+          f.c_bot_knee.value = ''; f.c_bot_opening.value = ''; f.c_bot_inseam.value = ''; f.c_bot_outseam.value = '';
+          f.c_bot_front_rise.value = ''; f.c_bot_back_rise.value = '';
       }
-
       show(this.el.btnCancelEdit);
     }
 
@@ -241,8 +208,7 @@
       if(this.el.formTitle) this.el.formTitle.textContent = 'Новый профиль';
       const f = this.el.form;
       if(!f) return;
-      f.reset();
-      f.id.value = '';
+      f.reset(); f.id.value = '';
       hide(this.el.btnCancelEdit);
     }
 
@@ -250,45 +216,40 @@
       const f = this.el.form;
       if(!f) return;
       
-      // Собираем проблемные зоны
       const problem_zones = [];
-      if(f.pz_shoulders?.checked) problem_zones.push('shoulders');
-      if(f.pz_belly?.checked) problem_zones.push('belly');
-      if(f.pz_hips?.checked) problem_zones.push('hips');
-      if(f.pz_arms?.checked) problem_zones.push('arms');
+      ['shoulders', 'chest', 'belly', 'hips', 'thigh', 'bicep'].forEach(z => {
+          if (f['pz_'+z] && f['pz_'+z].checked) problem_zones.push(z);
+      });
 
-      // Собираем Comfort_C (уже в flat_half, так как меряли на столе)
       const comfort_C = {};
-      
-      const tChest = Number(f.c_top_chest?.value);
-      const tSleeve = Number(f.c_top_sleeve?.value);
-      if(tChest || tSleeve) {
-          comfort_C.top = {};
-          if(tChest) comfort_C.top.chest = tChest;
-          if(tSleeve) comfort_C.top.sleeve = tSleeve;
-      }
+      const tKeys = ['shoulders', 'back', 'chest', 'waist', 'hem', 'length', 'sleeve', 'bicep'];
+      const tMap = {'back':'back_width', 'waist':'waist_top', 'hem':'hem_top', 'length':'length_top'};
+      let hasTop = false; comfort_C.top = {};
+      tKeys.forEach(k => {
+          const val = Number(f['c_top_'+k]?.value);
+          if (val) { comfort_C.top[tMap[k] || k] = val; hasTop = true; }
+      });
+      if (!hasTop) delete comfort_C.top;
 
-      const bWaist = Number(f.c_bot_waist?.value);
-      const bHips = Number(f.c_bot_hips?.value);
-      const bInseam = Number(f.c_bot_inseam?.value);
-      if(bWaist || bHips || bInseam) {
-          comfort_C.bottom = {};
-          if(bWaist) comfort_C.bottom.waist_bottom = bWaist;
-          if(bHips) comfort_C.bottom.hips = bHips;
-          if(bInseam) comfort_C.bottom.inseam = bInseam;
-      }
+      const bKeys = ['waist', 'high_hip', 'hips', 'thigh', 'knee', 'opening', 'inseam', 'outseam', 'front_rise', 'back_rise'];
+      const bMap = {'waist':'waist_bottom', 'opening':'leg_opening'};
+      let hasBot = false; comfort_C.bottom = {};
+      bKeys.forEach(k => {
+          const val = Number(f['c_bot_'+k]?.value);
+          if (val) { comfort_C.bottom[bMap[k] || k] = val; hasBot = true; }
+      });
+      if (!hasBot) delete comfort_C.bottom;
 
       const payload = {
-        name: f.name.value.trim(),
-        gender: f.gender.value,
-        height: Number(f.height.value || 0),
-        chest: Number(f.chest.value || 0),
-        shoulders: Number(f.shoulders.value || 0),
-        waist: Number(f.waist.value || 0),
-        hips: Number(f.hips.value || 0),
-        arm_length: Number(f.arm_length.value || 0),
-        leg_length: Number(f.leg_length.value || 0),
-        inseam: Number(f.inseam.value || 0),
+        name: f.name.value.trim(), gender: f.gender.value, height: Number(f.height.value || 0),
+        neck: Number(f.b_neck.value || 0) || null, shoulders: Number(f.b_shoulders.value || 0) || null,
+        back_width: Number(f.b_back_width.value || 0) || null, chest: Number(f.b_chest.value || 0) || null,
+        waist_top: Number(f.b_waist_top.value || 0) || null, bicep: Number(f.b_bicep.value || 0) || null,
+        arm_length: Number(f.b_arm_length.value || 0) || null, waist_bottom: Number(f.b_waist_bottom.value || 0) || null,
+        high_hip: Number(f.b_high_hip.value || 0) || null, hips: Number(f.b_hips.value || 0) || null,
+        thigh: Number(f.b_thigh.value || 0) || null, knee: Number(f.b_knee.value || 0) || null,
+        calf: Number(f.b_calf.value || 0) || null, leg_length: Number(f.b_outseam.value || 0) || null,
+        inseam: Number(f.b_inseam.value || 0) || null,
         problem_zones: problem_zones,
         comfort_C: Object.keys(comfort_C).length > 0 ? comfort_C : null
       };
@@ -303,38 +264,24 @@
         this.toast('Профиль создан');
       }
 
-      await this.loadProfiles();
-      this.renderProfiles();
-      this.clearForm();
-      await this.refreshResults();
+      await this.loadProfiles(); this.renderProfiles(); this.clearForm(); await this.refreshResults();
     }
 
     async deleteProfile(id){
       await api(`/api/profiles/${id}`, {method:'DELETE'});
       this.toast('Удалено');
-      await this.loadProfiles();
-      this.renderProfiles();
-      await this.refreshResults();
+      await this.loadProfiles(); this.renderProfiles(); await this.refreshResults();
     }
 
     async refreshResults(){
       if(!this.state.activeProfileId){
-        this.state.results = [];
-        this.renderCards();
-        return;
+        this.state.results = []; this.renderCards(); return;
       }
-
-      const payload = { profile_id: this.state.activeProfileId };
       try {
-        const data = await api(API.calculate(50), {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
+        const data = await api(API.calculate(50), { method: 'POST', body: JSON.stringify({ profile_id: this.state.activeProfileId }) });
         this.state.results = Array.isArray(data) ? data : [];
         this.renderCards();
-      } catch (e) {
-          this.toast('Ошибка загрузки рекомендаций');
-      }
+      } catch (e) { this.toast('Ошибка загрузки рекомендаций'); }
     }
 
     renderCards(){
@@ -342,126 +289,104 @@
       this.el.cards.innerHTML = '';
       const list = this.state.results;
 
-      if(!list.length){
-        show(this.el.emptyState);
-        return;
-      }
+      if(!list.length){ show(this.el.emptyState); return; }
       hide(this.el.emptyState);
 
       for(const r of list){
         const card = document.createElement('div');
-        card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-lg transition-shadow cursor-pointer flex flex-col';
+        card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-xl transition-all cursor-pointer flex flex-col transform hover:-translate-y-1';
 
         const img = r?.image_url || PLACEHOLDER_IMG;
         const scoreVal = Number(r?.score ?? 0);
-        const scoreTxt = Number.isFinite(scoreVal) ? Math.round(scoreVal) + '%' : '0%';
-        
         let scoreColor = 'text-green-600 bg-green-50 border-green-200';
-        if (scoreVal < 85) scoreColor = 'text-cyan-600 bg-cyan-50 border-cyan-200';
-        if (scoreVal < 65) scoreColor = 'text-yellow-600 bg-yellow-50 border-yellow-200';
-        if (scoreVal < 45) scoreColor = 'text-red-600 bg-red-50 border-red-200';
+        if (scoreVal < 80) scoreColor = 'text-cyan-600 bg-cyan-50 border-cyan-200';
+        if (scoreVal < 60) scoreColor = 'text-yellow-600 bg-yellow-50 border-yellow-200';
+        if (scoreVal < 40) scoreColor = 'text-red-600 bg-red-50 border-red-200';
 
-        const sku = r?.sku || '';
         const explainParts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
         const mainVerdict = explainParts[0] || 'Нет данных';
 
         card.innerHTML = `
           <div class="aspect-[4/5] bg-gray-50 overflow-hidden relative">
             <img src="${esc(img)}" onerror="this.src='${PLACEHOLDER_IMG}'" class="w-full h-full object-cover"/>
-            <div class="absolute top-3 right-3 px-3 py-1.5 rounded-xl border font-black text-sm shadow-sm backdrop-blur-sm ${scoreColor}">
-                ${esc(scoreTxt)}
+            <div class="absolute top-3 right-3 px-3 py-1.5 rounded-xl border font-black text-sm shadow-md backdrop-blur-md ${scoreColor}">
+                ${Math.round(scoreVal)}%
             </div>
           </div>
-
-          <div class="p-4 flex flex-col flex-1">
-            <div class="font-black text-lg truncate">${esc(r?.name || sku || '—')}</div>
-            <div class="text-xs text-gray-500 mt-1 uppercase tracking-widest font-extrabold">${esc(r?.platform || '')} • SKU ${esc(sku)}</div>
-
-            <div class="mt-4 text-sm font-semibold text-gray-800 flex-1">${esc(mainVerdict)}</div>
-
-            <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between gap-2">
-              <div class="text-xs text-gray-500 uppercase tracking-widest font-extrabold">Рекомендуемый размер: <span class="text-black text-sm ml-1">${esc(r?.best_size || '—')}</span></div>
+          <div class="p-5 flex flex-col flex-1">
+            <div class="font-black text-lg truncate">${esc(r?.name || r?.sku || '—')}</div>
+            <div class="text-[10px] text-gray-400 mt-1 uppercase tracking-widest font-extrabold">${esc(r?.platform || '')} • SKU ${esc(r?.sku)}</div>
+            <div class="mt-4 text-sm font-bold text-gray-700 flex-1 leading-snug">${esc(mainVerdict)}</div>
+            <div class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+              <div class="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Размер: <span class="text-black text-lg ml-1">${esc(r?.best_size || '—')}</span></div>
             </div>
           </div>
         `;
-
         card.addEventListener('click', ()=> this.openModal(r));
         this.el.cards.appendChild(card);
       }
     }
 
-openModal(r){
+    openModal(r){
       this.state.currentCard = r;
-      const sku = r?.sku || '';
-      const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
-
       if(this.el.modalTitle) this.el.modalTitle.textContent = r?.name || r?.sku || '—';
-      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${sku} • Рекомендация: ${r?.best_size || '—'}`;
+      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${r?.sku} • Рекомендация: ${r?.best_size || '—'}`;
       if(this.el.modalImage) this.el.modalImage.src = r?.image_url || PLACEHOLDER_IMG;
-
-      const scoreVal = Number(r?.score ?? 0);
-      if(this.el.modalScore) this.el.modalScore.textContent = Math.round(scoreVal) + '%';
+      if(this.el.modalScore) this.el.modalScore.textContent = Math.round(Number(r?.score ?? 0)) + '%';
 
       if(this.el.modalExplain) {
-        let html = `
-          <div class="mt-2 pt-4 border-t border-gray-100">
-            <a href="${builderUrl}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
-              ✎ Настроить в Builder (X-RAY)
+        this.el.modalExplain.innerHTML = `
+          <div class="mt-2 pt-4 border-t border-gray-100 flex gap-2">
+            <a href="/builder?sku=${encodeURIComponent(r?.sku || '')}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
+              ✎ Настроить (Builder)
             </a>
-          </div>
-        `;
-        this.el.modalExplain.innerHTML = html;
+          </div>`;
       }
 
-      // --- ПАНЕЛЬ РЕНТГЕНА ---
       let xrayHtml = `
-        <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold mb-2">Существующие размеры (в наличии):</div>
+        <div class="text-[11px] uppercase tracking-widest text-gray-400 font-extrabold mb-2">Размеры в наличии:</div>
         <div class="flex gap-2 flex-wrap mb-6">
-            ${(r.available_sizes || []).map(sz => `<span class="px-3 py-1 bg-gray-100 text-gray-800 font-black text-sm rounded-lg">${sz}</span>`).join('')}
+            ${(r.available_sizes || []).map(sz => `<span class="px-3 py-1 bg-white border border-gray-200 text-gray-800 font-black text-xs rounded-lg shadow-sm">${sz}</span>`).join('')}
         </div>
-        
-        <div class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-3">Детальный рентген посадки (Все размеры)</div>
-        <div class="space-y-4">
-      `;
+        <div class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-3">Рентген посадки (Матрица IP 2.0)</div>
+        <div class="space-y-4">`;
       
       (r.xray || []).forEach(sz => {
           let isRec = sz.size_label === r.best_size;
           let colorClass = 'border-gray-200 bg-white';
-          if (sz.hard_fit === 'FAIL') colorClass = 'border-red-200 bg-red-50 text-red-900 opacity-70';
-          else if (isRec) colorClass = 'border-green-300 bg-green-50 shadow-md';
+          if (sz.hard_fit === 'FAIL') colorClass = 'border-red-200 bg-red-50 text-red-900 opacity-60';
+          else if (isRec) colorClass = 'border-indigo-300 bg-indigo-50/50 shadow-md ring-2 ring-indigo-100';
           
-          let zonesHtml = sz.xray_zones.map(z => `
-              <div class="flex flex-col sm:flex-row sm:justify-between text-[11px] py-1 border-b border-gray-100/50 last:border-0">
-                  <span class="sm:w-1/3 truncate font-bold text-gray-700">${z.zone_name}</span>
-                  <span class="sm:w-1/3 text-gray-500">Цель: ${fmt(z.target_val)} → Вещь: ${fmt(z.garment_val)}</span>
+          let zonesHtml = (sz.xray_zones || []).map(z => `
+              <div class="flex flex-col sm:flex-row sm:justify-between text-[11px] py-1.5 border-b border-gray-100/50 last:border-0 hover:bg-gray-50/50 transition px-1 rounded">
+                  <span class="sm:w-1/3 truncate font-bold text-gray-700 flex items-center gap-1">
+                      ${z.zone_name} 
+                      ${z.inferred ? '<span class="text-[8px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Inferred</span>' : ''}
+                  </span>
+                  <span class="sm:w-1/3 text-gray-500 font-mono text-[10px]">C:${fmt(z.target_val)} → В:${fmt(z.garment_val)}</span>
                   <span class="sm:w-1/3 sm:text-right font-bold ${z.penalty > 0 ? 'text-red-500' : 'text-green-600'}">${z.status} (${fmt(z.delta_eff)}см)</span>
               </div>
           `).join('');
 
           xrayHtml += `
-              <div class="rounded-xl border ${colorClass} p-3 transition-all">
-                  <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-100/30">
-                      <div class="font-black text-sm flex items-center gap-2">
+              <div class="rounded-2xl border ${colorClass} p-4 transition-all overflow-hidden">
+                  <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-100/50">
+                      <div class="font-black text-base flex items-center gap-2">
                           Размер ${sz.size_label} 
-                          ${!sz.is_available ? '<span class="text-[9px] uppercase tracking-widest bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">Теория</span>' : ''}
+                          ${!sz.is_available ? '<span class="text-[9px] uppercase tracking-widest bg-gray-200 text-gray-500 px-2 py-1 rounded-md">Теория</span>' : ''}
                       </div>
-                      <div class="font-bold text-xs ${sz.hard_fit === 'FAIL' ? 'text-red-600' : ''}">${Math.round(sz.score)}% - ${sz.global_status}</div>
+                      <div class="font-black text-sm ${sz.hard_fit === 'FAIL' ? 'text-red-600' : 'text-indigo-600'}">${Math.round(sz.score)}% - ${sz.global_status}</div>
                   </div>
                   <div>${zonesHtml}</div>
-                  ${sz.warnings.length ? `<div class="mt-2 text-[10px] text-red-600 font-bold bg-white p-2 rounded border border-red-100">${sz.warnings.join('<br>')}</div>` : ''}
-              </div>
-          `;
+                  ${(sz.warnings || []).length ? `<div class="mt-3 text-[10px] text-red-600 font-bold bg-white p-2 rounded-xl border border-red-100 shadow-sm leading-relaxed">${sz.warnings.join('<br>')}</div>` : ''}
+              </div>`;
       });
       xrayHtml += `</div>`;
-
       if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = xrayHtml;
-
       show(this.el.modal);
     }
 
-    closeModal(){
-      hide(this.el.modal);
-    }
+    closeModal(){ hide(this.el.modal); }
   }
 
   new App();

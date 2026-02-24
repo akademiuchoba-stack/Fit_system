@@ -100,13 +100,31 @@ def webhook_deploy():
 @app.get("/api/profiles")
 def list_profiles(db: Session = Depends(database.get_db)):
     profiles = db.query(models.BodyProfile).order_by(models.BodyProfile.updated_at.desc()).all()
-    return [{"id": p.id, "name": p.name, "gender": p.gender, "height": p.height, "chest": p.chest, "shoulders": p.shoulders, "waist": p.waist, "hips": p.hips, "arm_length": p.arm_length, "leg_length": p.leg_length, "inseam": p.inseam} for p in profiles]
+    return [{
+        "id": p.id, "name": p.name, "gender": p.gender, "height": p.height,
+        "shoulders": p.shoulders, "back_width": p.back_width, "chest": p.chest,
+        "waist_top": p.waist_top, "waist_bottom": p.waist_bottom, "high_hip": p.high_hip,
+        "hips": p.hips, "thigh": p.thigh, "knee": p.knee, "calf": p.calf,
+        "bicep": p.bicep, "neck": p.neck, "arm_length": p.arm_length,
+        "leg_length": p.leg_length, "inseam": p.inseam,
+        "problem_zones": p.problem_zones or [],
+        "comfort_C": p.comfort_C or {}
+    } for p in profiles]
 
 @app.get("/api/profiles/{profile_id}")
 def get_profile(profile_id: int, db: Session = Depends(database.get_db)):
     p = db.query(models.BodyProfile).filter(models.BodyProfile.id == profile_id).first()
     if not p: raise HTTPException(status_code=404, detail="Profile not found")
-    return {"id": p.id, "name": p.name, "gender": p.gender, "height": p.height, "chest": p.chest, "shoulders": p.shoulders, "waist": p.waist, "hips": p.hips, "arm_length": p.arm_length, "leg_length": p.leg_length, "inseam": p.inseam}
+    return {
+        "id": p.id, "name": p.name, "gender": p.gender, "height": p.height,
+        "shoulders": p.shoulders, "back_width": p.back_width, "chest": p.chest,
+        "waist_top": p.waist_top, "waist_bottom": p.waist_bottom, "high_hip": p.high_hip,
+        "hips": p.hips, "thigh": p.thigh, "knee": p.knee, "calf": p.calf,
+        "bicep": p.bicep, "neck": p.neck, "arm_length": p.arm_length,
+        "leg_length": p.leg_length, "inseam": p.inseam,
+        "problem_zones": p.problem_zones or [],
+        "comfort_C": p.comfort_C or {}
+    }
 
 @app.post("/api/profiles")
 def create_or_update_profile(payload: models.BodyProfileCreate, db: Session = Depends(database.get_db)):
@@ -138,17 +156,25 @@ def calculate_for_profile(req: models.CalculateRequest, db: Session = Depends(da
 
     # ИНИЦИАЛИЗАЦИЯ ПОЛЬЗОВАТЕЛЯ С КОМФОРТНЫМИ ВЕЩАМИ
     user = logic.Profile(
-        height=profile.height or 175.0,
-        chest=profile.chest or 100.0,
-        waist=profile.waist or 85.0,
-        hips=profile.hips or 100.0,
-        shoulders=profile.shoulders or 45.0,
-        arm_length=profile.arm_length or 62.0,
-        outseam=profile.leg_length or 105.0,
-        inseam=profile.inseam or 80.0,
-        problem_zones=profile.problem_zones or [],
-        comfort_C=profile.comfort_C or {}
-    )
+            height=profile.height or 175.0,
+            shoulders=profile.shoulders or 0.0,
+            back_width=profile.back_width or 0.0,
+            chest=profile.chest or 0.0,
+            waist_top=profile.waist_top or 0.0,
+            waist_bottom=profile.waist_bottom or 0.0,
+            high_hip=profile.high_hip or 0.0,
+            hips=profile.hips or 0.0,
+            thigh=profile.thigh or 0.0,
+            knee=profile.knee or 0.0,
+            calf=profile.calf or 0.0,
+            bicep=profile.bicep or 0.0,
+            neck=profile.neck or 0.0,
+            arm_length=profile.arm_length or 0.0,
+            outseam=profile.leg_length or 0.0,
+            inseam=profile.inseam or 0.0,
+            problem_zones=profile.problem_zones or [],
+            comfort_C=profile.comfort_C or {}
+        )
 
     items = get_cached_items(db)
     results = []
@@ -215,13 +241,21 @@ def submit_feedback(fb: models.FeedbackSubmit, db: Session = Depends(database.ge
         # ИНИЦИАЛИЗАЦИЯ ПОЛЬЗОВАТЕЛЯ С КОМФОРТНЫМИ ВЕЩАМИ
         user = logic.Profile(
             height=profile.height or 175.0,
-            chest=profile.chest or 100.0,
-            waist=profile.waist or 85.0,
-            hips=profile.hips or 100.0,
-            shoulders=profile.shoulders or 45.0,
-            arm_length=profile.arm_length or 62.0,
-            outseam=profile.leg_length or 105.0,
-            inseam=profile.inseam or 80.0,
+            shoulders=profile.shoulders or 0.0,
+            back_width=profile.back_width or 0.0,
+            chest=profile.chest or 0.0,
+            waist_top=profile.waist_top or 0.0,
+            waist_bottom=profile.waist_bottom or 0.0,
+            high_hip=profile.high_hip or 0.0,
+            hips=profile.hips or 0.0,
+            thigh=profile.thigh or 0.0,
+            knee=profile.knee or 0.0,
+            calf=profile.calf or 0.0,
+            bicep=profile.bicep or 0.0,
+            neck=profile.neck or 0.0,
+            arm_length=profile.arm_length or 0.0,
+            outseam=profile.leg_length or 0.0,
+            inseam=profile.inseam or 0.0,
             problem_zones=profile.problem_zones or [],
             comfort_C=profile.comfort_C or {}
         )

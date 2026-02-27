@@ -36,7 +36,7 @@ ADMIN_JS_FILE = FRONTEND_DIR / "admin.js"
 BUILDER_FILE = FRONTEND_DIR / "builder.html"
 BUILDER_JS_FILE = FRONTEND_DIR / "builder.js"
 
-models.Base.metadata.create_all(bind=database.engine)
+database.init_db(models.Base)
 
 # ---- Static frontend ----
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")

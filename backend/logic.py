@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Optional, Tuple
 
 # -----------------------------------------
-# Fit Engine v4.1 (Full Architectural)
+# Fit Engine v4.2 (Full Architectural)
 # - IdealEase + mode detector + scaling
 # - hard gate
 # - compensation + reverse deformation
@@ -37,10 +37,10 @@ ZONES_RU = {
 }
 
 # Zones grouped
-TOP_HALF_ZONES = ["chest", "waist_top", "hem_top", "belly", "bicep"]
+TOP_HALF_ZONES = ["chest", "waist_top", "hem_top", "bicep"]
 TOP_LEN_ZONES = ["shoulders", "sleeve", "length_top"]
 
-BOTTOM_HALF_ZONES = ["waist_bottom", "high_hip", "hips", "thigh", "knee", "calf", "leg_opening", "belly"]
+BOTTOM_HALF_ZONES = ["waist_bottom", "high_hip", "hips", "thigh", "knee", "calf", "leg_opening"]
 BOTTOM_LEN_ZONES = ["inseam", "outseam", "front_rise", "back_rise"]
 
 # -----------------------------
@@ -82,8 +82,7 @@ WEIGHTS = {
         "chest": 1.2,
         "waist_top": 0.7,
         "hem_top": 0.5,
-        "belly": 0.9,
-        "bicep": 0.6,
+"bicep": 0.6,
         "shoulders": 1.0,
         "sleeve": 0.4,
         "length_top": 0.4,
@@ -92,8 +91,7 @@ WEIGHTS = {
         "chest": 1.1,
         "waist_top": 1.0,
         "hem_top": 0.8,
-        "belly": 0.8,
-        "bicep": 0.5,
+"bicep": 0.5,
         "shoulders": 0.6,
         "sleeve": 0.4,
         "length_top": 0.4,
@@ -248,17 +246,29 @@ LOOSE_MULT = 3.0
 class ZoneDetail:
     zone: str
     label: str
-    body: float
-    garment: float
-    target: float
-    delta: float                  # effective delta (after compensation)
-    raw_delta: Optional[float]    # raw delta (before compensation)
+    body: Optional[float]
+    garment: Optional[float]
+    target: Optional[float]
+    delta: Optional[float]               # effective delta (after compensation)
+    raw_delta: Optional[float]           # raw delta (before compensation)
     status: str
     penalty: float
     inferred: bool
+    weight: Optional[float] = None
+    used: Optional[str] = None
+    notes: Optional[str] = None
 
 @dataclass
 class SizeResult:
+    size_label: str
+    score: float
+    confidence: float
+    mode: str
+    hard_fail: bool
+    global_status: str
+    warnings: List[str]
+    details: List[ZoneDetail]
+
     size_label: str
     score: float
     confidence: float
@@ -380,19 +390,79 @@ def _critical_zones(garment_type: str) -> Tuple[List[str], List[str]]:
     rec = ["high_hip", "thigh", "leg_opening", "front_rise", "back_rise", "outseam"]
     return must, rec
 
-def _hard_gate_zones(garment_type: str, problem_zones: List[str]) -> List[str]:
-    # v4.1: hard gate uses critical + problem emphasis
+def _hard_gate_zones(garment_type: str, mapped_problem: List[str]) -> List[str]:
+    # v4.2: hard gate uses measurement-zones (mapped_problem), not raw human zones.
+    mp = set(mapped_problem or [])
     if garment_type == "tshirt":
         zones = ["chest", "bicep"]
-        if "belly" in problem_zones:
-            zones += ["belly", "waist_top", "hem_top"]
-        return zones
-    if garment_type == "trousers":
-        zones = ["waist_bottom", "hips", "thigh"]
-        if "belly" in problem_zones:
-            zones += ["belly"]
-        return zones
+        if any(z in mp for z in ("waist_top", "hem_top", "chest")):
+            zones += ["waist_top", "hem_top"]
+        return sorted(set(zones))
+    if garment_type in ("trousers", "jeans"):
+        zones = ["waist_bottom", "high_hip", "hips", "thigh", "front_rise"]
+        # if belly is a problem, high_hip/front_rise already cover it; keep them in gate
+        return sorted(set(zones))
+    if garment_type in ("shirt", "blazer", "coat"):
+        zones = ["shoulders", "chest"]
+        if garment_type in ("blazer", "coat"):
+            zones += ["back_width", "bicep"]
+        if "waist_top" in mp:
+            zones += ["waist_top"]
+        return sorted(set(zones))
+    if garment_type == "sneakers":
+        zones = ["insole_length", "insole_width_forefoot"]
+        if "instep_height" in mp:
+            zones += ["instep_height"]
+        return sorted(set(zones))
     return []
+
+
+def _map_problem_zones(garment_type: str, problem_zones: List[str]) -> List[str]:
+    """Map human 'problem_zones' (belly/arms/etc.) to measurement zones used by the engine.
+
+    v4.2: 'belly' is NOT a garment measurement zone. For bottoms we map it to high_hip/front_rise/waist_bottom,
+    for tops we map it to waist_top/hem_top/chest (and sometimes length).
+    """
+    p = set(problem_zones or [])
+    mapped: List[str] = []
+
+    # direct zones (if user explicitly uses engine zones)
+    for z in p:
+        if z in ZONES_RU:
+            mapped.append(z)
+
+    # semantic mappings
+    if "belly" in p:
+        if garment_type in ("trousers", "jeans"):
+            mapped += ["high_hip", "front_rise", "waist_bottom"]
+        else:
+            mapped += ["waist_top", "hem_top", "chest", "length_top"]
+
+    if "arms" in p:
+        mapped += ["sleeve", "bicep"]
+    if "shoulders" in p:
+        mapped += ["shoulders", "back_width"]
+    if "legs" in p:
+        mapped += ["inseam", "outseam"]
+    if "calves" in p:
+        mapped += ["knee", "leg_opening"]
+    if "foot_width" in p:
+        mapped += ["insole_width_forefoot"]
+    if "high_instep" in p:
+        mapped += ["instep_height"]
+
+    # dedupe while preserving order
+    out: List[str] = []
+    for z in mapped:
+        if z not in out:
+            out.append(z)
+    # v4.2: normalize weights for comparable scoring across garment types
+    w_sum = sum((v.get("weight") or 0.0) for v in out.values())
+    if w_sum > 0:
+        for z in out:
+            out[z]["weight"] = float(out[z]["weight"]) / w_sum
+
+    return out
 
 def _get_comfort_offset(
     comfort_C: Dict[str, Any],
@@ -474,11 +544,23 @@ def _apply_compensations(
             if delta_eff[source] > 0:
                 delta_eff[affected] = delta_eff[affected] + k * delta_eff[source]
 
-    # reverse deformation (tight belly consumes length / rise)
+    # reverse deformation (tight torso/upper hip consumes length / rise)
     beta = _fabric_beta(fabric)
-    belly = delta_eff.get("belly")
-    if belly is not None and belly < 0:
-        loss = abs(belly) * beta
+
+    # v4.2: 'belly' is not a garment zone; infer tightness from measured zones.
+    tight_source = None
+    if garment_type == "tshirt":
+        # choose the most negative of available torso zones
+        candidates = [delta_eff.get("waist_top"), delta_eff.get("hem_top"), delta_eff.get("chest")]
+        candidates = [c for c in candidates if c is not None]
+        tight_source = min(candidates) if candidates else None
+    elif garment_type == "trousers":
+        tight_source = delta_eff.get("high_hip")
+        if tight_source is None:
+            tight_source = delta_eff.get("waist_bottom")
+
+    if tight_source is not None and tight_source < 0:
+        loss = abs(tight_source) * beta
 
         # tshirt: length_top gets worse
         if garment_type == "tshirt":
@@ -546,10 +628,11 @@ def detect_mode_v31(
             flags.append("wide_thigh")
 
     mode = "STANDARD"
-    if len(design_zones) >= 1 or len(flags) >= 1:
-        mode = "DESIGN"
-    elif len(suspect) >= 1:
+    # v4.2: suspect overrides DESIGN (uncertain means "design-like but unreliable")
+    if len(suspect) >= 1:
         mode = "UNCERTAIN"
+    elif len(design_zones) >= 1 or len(flags) >= 1:
+        mode = "DESIGN"
 
     return {
         "mode": mode,
@@ -569,7 +652,7 @@ def _targets_for_zone(
     buyer_half: Dict[str, float],
     model_half: Dict[str, float],
     fabric: Dict[str, Any],
-    problem_zones: List[str],
+    mapped_problem: List[str],
     comfort_C: Dict[str, Any],
 ) -> Dict[str, Dict[str, Any]]:
     """
@@ -587,6 +670,9 @@ def _targets_for_zone(
     ease_model = mode_info.get("ease_model") or {}
 
     Ks = _ease_transfer_scale(garment_type, buyer_half, model_half)
+
+    # v4.2: mapped problem zones are measurement zones, not raw human labels
+    mapped_problem_set = set(mapped_problem or [])
 
     out: Dict[str, Dict[str, Any]] = {}
     zones = set(list(wmap.keys()) + list(base.keys()) + list(buyer_half.keys()))
@@ -625,7 +711,7 @@ def _targets_for_zone(
         # v4.1: problem zones tighten tolerance + increase weight (critical comfort zones)
         weight = float(wmap.get(z, 0.0))
         tol_neg, tol_pos = float(tol[0]), float(tol[1])
-        if z in problem_zones:
+        if z in mapped_problem_set:
             weight *= PROBLEM_WEIGHT_MULT
             tol_neg *= PROBLEM_TOL_SHRINK
             tol_pos *= PROBLEM_TOL_SHRINK
@@ -655,6 +741,13 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
         gender = "male"
 
     bm = buyer.get("measurements") or {}
+
+    # v4.2: legacy aliases (do not break old profiles)
+    if isinstance(bm, dict):
+        if "hip_circ" in bm and "hips_circ" not in bm:
+            bm["hips_circ"] = bm.get("hip_circ")
+        if "hip" in bm and "hips" not in bm:
+            bm["hips"] = bm.get("hip")
     buyer_half: Dict[str, float] = {}
     # half zones: accept either z_circ or z (circumference)
     for z in TOP_HALF_ZONES + BOTTOM_HALF_ZONES:
@@ -680,6 +773,9 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
     if not isinstance(problem_zones, list):
         problem_zones = []
     problem_zones = [str(x).strip().lower() for x in problem_zones if str(x).strip() != ""]
+
+    # v4.2: map human problem zones into measurement zones
+    mapped_problem = _map_problem_zones(garment_type=garment_type, problem_zones=problem_zones)
 
     comfort_C = buyer.get("comfort_C") or {}
     if not isinstance(comfort_C, dict):
@@ -722,7 +818,7 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
         buyer_half=buyer_half,
         model_half=model_half,
         fabric=fabric,
-        problem_zones=problem_zones,
+        mapped_problem=mapped_problem,
         comfort_C=comfort_C,
     )
 
@@ -735,6 +831,11 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
 
     gate_mul = _fabric_gate_multiplier(fabric)
     pen_mul_neg, pen_mul_pos = _fabric_penalty_multipliers(fabric)
+
+    # v4.2: normalize fabric meta once (used in score + confidence)
+    stiff = (fabric.get("stiffness") or "medium").lower().strip()
+    fabric_type = _norm_fabric_type(fabric)
+    elast = _to_float(fabric.get("elastane_pct")) or 0.0
 
     all_results: List[SizeResult] = []
 
@@ -762,10 +863,15 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
         details: List[ZoneDetail] = []
         hard_fail = False
 
+        # v4.2: precompute mapped problem set (measurement zones) and hard-gate zones
+        mapped_problem_set = set(mapped_problem or [])
+        hard_gate_zones = set(_hard_gate_zones(garment_type, mapped_problem))
+
+
         # -------------------------
         # HARD GATE LAYER (v4.1)
         # -------------------------
-        for z in _hard_gate_zones(garment_type, problem_zones):
+        for z in hard_gate_zones:
             if z not in targets:
                 continue
             if inferred.get(z, True):
@@ -779,7 +885,7 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
 
             min_allow = GATE_MIN.get(z, 0.5)
             # problem zones stricter gate
-            if z in problem_zones:
+            if z in mapped_problem_set:
                 min_allow += 0.5
 
             min_allow_eff = min_allow * gate_mul
@@ -832,13 +938,54 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
             gar = g_meas.get(z)
 
             if body is None or gar is None:
-                # add “missing garment measurement” warning for key zones
-                if z in ("chest", "waist_bottom", "hips", "inseam") and gar is None:
+                # v4.2: missing zones must reduce SCORE (not only confidence)
+                weight = float(tinfo.get("weight") or 0.0)
+
+                # add warning for key zones
+                if gar is None and z in ("chest", "waist_bottom", "high_hip", "hips", "thigh", "front_rise", "inseam"):
                     warnings.append(f"Нет замера вещи: {ZONES_RU.get(z, z)}")
+
+                miss_mult = 1.0
+                if z in must_zones:
+                    miss_mult = 2.2
+                elif z in rec_zones:
+                    miss_mult = 1.2
+                if z in hard_gate_zones:
+                    miss_mult = max(miss_mult, 2.2)
+                if z in mapped_problem_set:
+                    miss_mult *= 1.3
+
+                # fabric gates: stiff/denim punishes missing more
+                if fabric_type == "denim" or stiff == "stiff":
+                    miss_mult *= 1.15
+
+                missing_zone_loss = 2.5 * miss_mult
+                total_loss += weight * missing_zone_loss
+
+                details.append(
+                    ZoneDetail(
+                        zone=z,
+                        label=ZONES_RU.get(z, z),
+                        body=float(body) if body is not None else None,
+                        garment=float(gar) if gar is not None else None,
+                        target=None,
+                        delta=None,
+                        raw_delta=None,
+                        status="missing",
+                        penalty=float(missing_zone_loss),
+                        inferred=True,
+                        weight=float(weight),
+                        used=tinfo.get("used") or "unknown",
+                        notes="missing_measurement",
+                    )
+                )
                 continue
 
             target = tinfo.get("target")
             if target is None:
+                # missing target also reduces score mildly
+                weight = float(tinfo.get("weight") or 0.0)
+                total_loss += weight * 1.0
                 continue
 
             # effective delta
@@ -901,19 +1048,24 @@ def calculate_fit_v31(buyer: Dict[str, Any], v31: Dict[str, Any]) -> Dict[str, A
         missing_must = [z for z in must_zones if inferred.get(z, True)]
         missing_rec = [z for z in rec_zones if inferred.get(z, True)]
 
-        confidence -= 25.0 * len(missing_must)
-        confidence -= 5.0 * len(missing_rec)
+        # v4.2: confidence depends on zone weights + criticality (not flat counts)
 
-        # problem zones missing => bigger confidence drop (critical comfort zones)
-        for pz in problem_zones:
-            if pz in inferred and inferred[pz]:
-                confidence -= 15.0
+        for z in missing_must:
+            w = float(targets.get(z, {}).get("weight") or 0.0)
+            # must zones are high-impact; add small constant to avoid w=0 edge
+            confidence -= 60.0 * (w + 0.04)
+
+        for z in missing_rec:
+            w = float(targets.get(z, {}).get("weight") or 0.0)
+            confidence -= 25.0 * (w + 0.02)
+
+        # mapped problem zones missing => bigger confidence drop (critical comfort zones)
+        for z in mapped_problem:
+            if inferred.get(z, True):
+                w = float(targets.get(z, {}).get("weight") or 0.0)
+                confidence -= 20.0 * (w + 0.03)
 
         # stiff fabric + many missing rec zones => confidence lower
-        stiff = (fabric.get("stiffness") or "medium").lower().strip()
-        fabric_type = _norm_fabric_type(fabric)
-        elast = _to_float(fabric.get("elastane_pct")) or 0.0
-
         if (fabric_type == "denim" or stiff == "stiff") and len(missing_rec) >= 3:
             confidence -= 10.0
         if fabric_type == "denim" and elast < 1.0 and len(missing_must) >= 1:

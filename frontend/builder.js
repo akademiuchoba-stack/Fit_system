@@ -148,6 +148,7 @@ function resetState() {
   setVal('stiffness', 'medium');
   setVal('model_gender', 'male');
   setVal('model_size_worn', '');
+  setVal('m_height', '');
 
   // model
   ['m_chest','m_waist_top','m_belly','m_hips','m_bicep','m_shoulders','m_inseam'].forEach(id => setVal(id,''));
@@ -307,6 +308,8 @@ function collectV31FromForm() {
   const modelGender = getVal('model_gender') || 'male';
   const modelSize = getVal('model_size_worn');
   const body = {};
+  const mHeight = toNum(getVal('m_height')); if (mHeight !== null) body.height_cm = mHeight;
+
   const mChest = toNum(getVal('m_chest')); if (mChest !== null) body.chest_circ = mChest;
   const mWaist = toNum(getVal('m_waist_top')); if (mWaist !== null) body.waist_top_circ = mWaist;
   const mBelly = toNum(getVal('m_belly')); if (mBelly !== null) body.belly_circ = mBelly;
@@ -390,6 +393,7 @@ function applyGarmentToForm(g) {
   setVal('model_gender', (v.model && v.model.gender) ? v.model.gender : 'male');
   setVal('model_size_worn', (v.model && v.model.size_worn) ? v.model.size_worn : '');
   const body = (v.model && v.model.body) ? v.model.body : {};
+  setVal('m_height', body.height_cm ?? '');
   setVal('m_chest', body.chest_circ ?? '');
   setVal('m_waist_top', body.waist_top_circ ?? '');
   setVal('m_belly', body.belly_circ ?? '');
@@ -519,71 +523,131 @@ function renderMatrixList() {
 
     card.innerHTML = `
       <div>
-        <div class="font-black text-lg">Размер ${sz}</div>
-        <div class="text-sm text-gray-600">${important.join(' • ') || '—'}</div>
+        <div class="font-black text-lg">${sz}</div>
+        <div class="text-sm text-gray-600 mt-1">${important.join(' • ') || '—'}</div>
       </div>
       <div class="flex gap-2">
-        <button data-act="load" data-size="${sz}" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold hover:bg-gray-50">Открыть</button>
-        <button data-act="delete" data-size="${sz}" class="px-3 py-2 rounded-xl border border-red-200 bg-white text-xs font-bold text-red-600 hover:bg-red-50">Удалить</button>
+        <button data-act="edit" class="px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-bold hover:bg-gray-50">Правка</button>
+        <button data-act="del" class="px-3 py-2 rounded-xl border border-red-200 bg-white text-xs font-bold text-red-600 hover:bg-red-50">Удалить</button>
       </div>
     `;
 
-    list.appendChild(card);
-  });
-
-  list.querySelectorAll('button[data-act]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const act = btn.getAttribute('data-act');
-      const sz = btn.getAttribute('data-size');
-      if (!act || !sz) return;
-      if (act === 'load') {
-        loadSizeToMatrixForm(sz);
-        toast(`Открыт размер ${sz}`);
+    card.querySelector('[data-act="edit"]').addEventListener('click', () => {
+      setVal('matrix_size', sz);
+      clearMatrixForm();
+      setVal('matrix_size', sz);
+      // apply measurements into form
+      if (garmentType === 'tshirt') {
+        setVal('mx_chest', meas.chest ?? '');
+        setVal('mx_waist_top', meas.waist_top ?? '');
+        setVal('mx_hem_top', meas.hem_top ?? '');
+        setVal('mx_bicep', meas.bicep ?? '');
+        setVal('mx_sleeve', meas.sleeve ?? '');
+        setVal('mx_length_top', meas.length_top ?? '');
+        setVal('mx_shoulders', meas.shoulders ?? '');
+      } else {
+        setVal('mx_waist_bottom', meas.waist_bottom ?? '');
+        setVal('mx_high_hip', meas.high_hip ?? '');
+        setVal('mx_hips', meas.hips ?? '');
+        setVal('mx_thigh', meas.thigh ?? '');
+        setVal('mx_leg_opening', meas.leg_opening ?? '');
+        setVal('mx_inseam', meas.inseam ?? '');
+        setVal('mx_outseam', meas.outseam ?? '');
+        setVal('mx_front_rise', meas.front_rise ?? '');
+        setVal('mx_back_rise', meas.back_rise ?? '');
       }
-      if (act === 'delete') {
-        if (!state.v31 || !state.v31.size_matrix) return;
-        delete state.v31.size_matrix[sz];
-        await saveCurrentGarment(true);
-        renderMatrixList();
-        toast(`Удалён размер ${sz}`);
-      }
+      setActiveTab('matrix');
+      toast(`Размер ${sz}: загружен в форму`);
     });
+
+    card.querySelector('[data-act="del"]').addEventListener('click', () => {
+      if (!state.v31 || !state.v31.size_matrix) return;
+      delete state.v31.size_matrix[sz];
+      renderMatrixList();
+      updateReadyBox();
+      toast(`Размер ${sz}: удалён`);
+    });
+
+    list.appendChild(card);
   });
 
   updateReadyBox();
 }
 
-function loadSizeToMatrixForm(size) {
-  clearMatrixForm();
-  setVal('matrix_size', size);
-  const node = state.v31?.size_matrix?.[size];
-  const meas = node?.measurements || {};
+// -----------------------------
+// Events
+// -----------------------------
+async function refreshList() {
+  try {
+    const list = await API.list();
+    const sel = $('select-existing');
+    sel.innerHTML = '<option value="">— Выберите из списка —</option>';
+    (list || []).forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.sku;
+      opt.textContent = `${g.sku}${g.name ? ` — ${g.name}` : ''}`;
+      sel.appendChild(opt);
+    });
+    toast('Список обновлён');
+  } catch (e) {
+    toast('Ошибка списка', false);
+  }
+}
 
-  const gt = getVal('garment_type') || 'tshirt';
-  if (gt === 'tshirt') {
-    setVal('mx_chest', meas.chest ?? '');
-    setVal('mx_waist_top', meas.waist_top ?? '');
-    setVal('mx_hem_top', meas.hem_top ?? '');
-    setVal('mx_bicep', meas.bicep ?? '');
-    setVal('mx_sleeve', meas.sleeve ?? '');
-    setVal('mx_length_top', meas.length_top ?? '');
-    setVal('mx_shoulders', meas.shoulders ?? '');
-  } else {
-    setVal('mx_waist_bottom', meas.waist_bottom ?? '');
-    setVal('mx_high_hip', meas.high_hip ?? '');
-    setVal('mx_hips', meas.hips ?? '');
-    setVal('mx_thigh', meas.thigh ?? '');
-    setVal('mx_leg_opening', meas.leg_opening ?? '');
-    setVal('mx_inseam', meas.inseam ?? '');
-    setVal('mx_outseam', meas.outseam ?? '');
-    setVal('mx_front_rise', meas.front_rise ?? '');
-    setVal('mx_back_rise', meas.back_rise ?? '');
+async function loadSku(sku) {
+  if (!sku) return;
+  try {
+    const g = await API.get(sku);
+    applyGarmentToForm(g);
+    toast(`Загружено: ${sku}`);
+  } catch (e) {
+    toast(`Не найдено: ${sku}`, false);
+  }
+}
+
+async function saveTheory() {
+  try {
+    const v31 = collectV31FromForm();
+    state.v31 = safeJson(v31);
+
+    const payload = {
+      sku: getVal('sku'),
+      name: getVal('name') || null,
+      price: toNum(getVal('price')),
+      image_url: getVal('img_front') || null,
+      image_url_back: getVal('img_back') || null,
+      in_stock: String(getVal('in_stock')) === 'true',
+      metrics: { schema_version: 'v3.1', v31 }
+    };
+
+    const res = await API.upsert(payload);
+    toast('Сохранено v3.1');
+    await refreshList();
+    // keep badge
+    $('current-sku-badge').textContent = payload.sku || 'Новый товар';
+    return res;
+  } catch (e) {
+    toast(String(e.message || e), false);
+  }
+}
+
+async function deleteGarment() {
+  const sku = getVal('sku');
+  if (!sku) { toast('Нет SKU', false); return; }
+  try {
+    const r = await API.del(sku);
+    toast('Удалено');
+    resetState();
+    await refreshList();
+    return r;
+  } catch (e) {
+    toast('Ошибка удаления', false);
   }
 }
 
 function fillMatrixFromGom() {
-  const gt = getVal('garment_type') || 'tshirt';
-  if (gt === 'tshirt') {
+  const garmentType = getVal('garment_type') || 'tshirt';
+  if (garmentType === 'tshirt') {
     setVal('mx_chest', getVal('g_chest'));
     setVal('mx_waist_top', getVal('g_waist_top'));
     setVal('mx_hem_top', getVal('g_hem_top'));
@@ -602,254 +666,113 @@ function fillMatrixFromGom() {
     setVal('mx_front_rise', getVal('g_front_rise'));
     setVal('mx_back_rise', getVal('g_back_rise'));
   }
+  toast('Скопировано из "вещь на модели"');
 }
 
-// -----------------------------
-// Saving
-// -----------------------------
-async function saveCurrentGarment(silent = false) {
-  const sku = getVal('sku');
-  if (!sku) {
-    if (!silent) toast('SKU обязателен', false);
-    throw new Error('SKU required');
-  }
+function saveMatrixSize() {
+  const size = getVal('matrix_size');
+  const measurements = collectMatrixMeasurements();
+  const err = validateMatrix(size, measurements);
+  if (err) { toast(err, false); return; }
 
-  const v31 = collectV31FromForm();
-
-  const payload = {
-    sku,
-    name: getVal('name') || sku,
-    price: toNum(getVal('price')),
-    platform: 'manual',
-    image_url: getVal('img_front') || '',
-    image_url_back: getVal('img_back') || '',
-    in_stock: (getVal('in_stock') !== 'false'),
-    metrics: {
-      schema_version: 'v3.1',
-      v31
-    }
+  if (!state.v31.size_matrix) state.v31.size_matrix = {};
+  state.v31.size_matrix[String(size)] = {
+    measurement_convention: 'flat_half',
+    measurements
   };
 
-  const res = await API.upsert(payload);
-  state.v31 = v31;
-  $('current-sku-badge').textContent = sku;
-  refreshMatrixSizeOptions(v31.product.available_sizes);
-  if (!silent) toast('Сохранено (v3.1)');
-
-  await refreshList(false);
-  try {
-    const loaded = await API.get(sku);
-    state.garment = loaded;
-  } catch (_) {}
-
-  updateReadyBox();
-  return res;
+  renderMatrixList();
+  clearMatrixForm();
+  setVal('matrix_size', '');
+  toast(`Матрица: сохранён размер ${size}`);
 }
 
-// -----------------------------
-// Load / list
-// -----------------------------
-async function refreshList(showToast = true) {
-  const sel = $('select-existing');
-  const items = await API.list();
-  sel.innerHTML = '<option value="">— Выберите из списка —</option>';
-  items.forEach(it => {
-    const opt = document.createElement('option');
-    opt.value = it.sku;
-    opt.textContent = `${it.sku}`;
-    sel.appendChild(opt);
-  });
-  if (showToast) toast('Список обновлён');
-}
-
-async function loadBySku(sku) {
-  if (!sku) {
-    toast('Введите SKU', false);
-    return;
-  }
+async function loadProfilesToFeedback() {
   try {
-    const g = await API.get(sku);
-    applyGarmentToForm(g);
-    toast('Загружено');
+    const profiles = await API.profiles();
+    const sel = $('fb_profile');
+    sel.innerHTML = '<option value="">— Выберите профиль —</option>';
+    (profiles || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = String(p.id);
+      opt.textContent = `${p.name || ('Profile ' + p.id)} (${p.gender || '—'})`;
+      sel.appendChild(opt);
+    });
   } catch (e) {
-    toast('Не найдено. Заполните форму и сохраните как новый товар.', false);
-    setVal('sku', sku);
-    $('current-sku-badge').textContent = sku;
-    updateReadyBox();
-  }
-}
-
-// -----------------------------
-// Feedback
-// -----------------------------
-async function loadProfiles() {
-  const sel = $('fb_profile');
-  sel.innerHTML = '';
-  const items = await API.profiles();
-  items.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = String(p.id);
-    opt.textContent = `${p.name || ('Profile ' + p.id)} (${p.gender || 'n/a'})`;
-    sel.appendChild(opt);
-  });
-  if (!items.length) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = 'Нет профилей — создайте на главной';
-    sel.appendChild(opt);
+    // ignore
   }
 }
 
 async function sendFeedback() {
-  if (!state.garment || !state.garment.id) {
-    toast('Сначала сохраните товар (v3.1)', false);
+  if (!state.garment?.id && !state.garment?.garment_id) {
+    toast('Сначала сохраните товар (вкладка База)', false);
     return;
   }
-  if (!state.v31 || !state.v31.size_matrix || Object.keys(state.v31.size_matrix).length === 0) {
-    toast('Сначала сохраните хотя бы 1 размер в матрицу', false);
-    return;
-  }
-
-  const profileId = getVal('fb_profile');
-  if (!profileId) {
-    toast('Выберите профиль', false);
-    return;
-  }
-
-  const sizeSelected = getVal('fb_size');
-  if (!sizeSelected) {
-    toast('Укажите надетый размер', false);
-    return;
-  }
+  const garmentId = state.garment.id || state.garment.garment_id;
+  const profileId = Number(getVal('fb_profile') || 0) || null;
+  if (!profileId) { toast('Выберите профиль', false); return; }
 
   const payload = {
-    garment_id: state.garment.id,
-    user_id: Number(profileId),
-    size_selected: sizeSelected,
-    is_point_zero: $('fb_point_zero').checked,
-    fit_matrix: {
-      schema_version: 'v3.1',
-      v31: state.v31,
-    }
+    garment_id: garmentId,
+    user_id: profileId,
+    size_selected: getVal('fb_size') || null,
+    is_point_zero: !!$('fb_point_zero')?.checked,
+    fit_matrix: state.v31 ? { schema_version: 'v3.1', v31: state.v31 } : null
   };
 
-  await API.feedback(payload);
-  toast('Фидбек отправлен');
+  try {
+    await API.feedback(payload);
+    toast('Фидбек отправлен');
+  } catch (e) {
+    toast(String(e.message || e), false);
+  }
 }
 
 // -----------------------------
 // Init
 // -----------------------------
 function bindEvents() {
-  $('tab-btn-theory').addEventListener('click', () => setActiveTab('theory'));
-  $('tab-btn-matrix').addEventListener('click', () => setActiveTab('matrix'));
-  $('tab-btn-feedback').addEventListener('click', () => setActiveTab('feedback'));
+  $('tab-btn-theory')?.addEventListener('click', () => setActiveTab('theory'));
+  $('tab-btn-matrix')?.addEventListener('click', () => setActiveTab('matrix'));
+  $('tab-btn-feedback')?.addEventListener('click', () => setActiveTab('feedback'));
 
-  $('btn-refresh-list').addEventListener('click', () => refreshList(true));
-  $('btn-new').addEventListener('click', () => { resetState(); toast('Новый товар'); });
-  $('btn-load').addEventListener('click', () => loadBySku(getVal('load_sku')));
-
-  $('select-existing').addEventListener('change', (e) => {
-    const sku = e.target.value;
-    if (sku) loadBySku(sku);
-  });
-
-  $('btn-sizes-all').addEventListener('click', () => {
+  $('btn-refresh-list')?.addEventListener('click', refreshList);
+  $('btn-new')?.addEventListener('click', () => { resetState(); toast('Новый товар'); });
+  $('btn-load')?.addEventListener('click', () => loadSku(getVal('load_sku')));
+  $('select-existing')?.addEventListener('change', (e) => loadSku(e.target.value));
+  $('btn-sizes-all')?.addEventListener('click', () => {
     const grid = $('sizes-grid');
-    grid.querySelectorAll('input[type=checkbox]').forEach(ch => ch.checked = true);
+    const checks = grid.querySelectorAll('input[type=checkbox]');
+    checks.forEach(ch => ch.checked = true);
     updateReadyBox();
-    if (state.v31) {
-      state.v31.product.available_sizes = getSelectedSizes();
-      refreshMatrixSizeOptions(state.v31.product.available_sizes);
-    }
   });
 
-  $('garment_type').addEventListener('change', () => {
-    updateGarmentTypeUI();
-    if (state.v31 && state.v31.product) {
-      state.v31.product.garment_type = getVal('garment_type');
-    }
-  });
+  $('garment_type')?.addEventListener('change', updateGarmentTypeUI);
 
-  ['sku','model_size_worn','m_chest','g_chest','g_waist_bottom','g_hips','g_inseam'].forEach(id => {
-    const el = $(id);
-    if (el) el.addEventListener('input', updateReadyBox);
-  });
-  $('sizes-grid').addEventListener('change', () => {
-    updateReadyBox();
-    if (state.v31 && state.v31.product) {
-      state.v31.product.available_sizes = getSelectedSizes();
-      refreshMatrixSizeOptions(state.v31.product.available_sizes);
-    }
-  });
+  // update readiness on key inputs
+  [
+    'sku','model_size_worn','m_chest','g_chest','g_waist_bottom','g_hips','g_inseam'
+  ].forEach(id => $(id)?.addEventListener('input', updateReadyBox));
 
-  $('btn-save-theory').addEventListener('click', async () => {
-    try {
-      await saveCurrentGarment(false);
-      renderMatrixList();
-    } catch (e) {
-      toast(String(e.message || e), false);
-    }
-  });
+  $('btn-save-theory')?.addEventListener('click', saveTheory);
+  $('btn-delete')?.addEventListener('click', deleteGarment);
 
-  $('btn-delete').addEventListener('click', async () => {
-    const sku = getVal('sku');
-    if (!sku) { toast('Нет SKU', false); return; }
-    await API.del(sku);
-    toast('Удалено');
-    resetState();
-    await refreshList(false);
-  });
+  $('btn-fill-from-gom')?.addEventListener('click', fillMatrixFromGom);
+  $('btn-save-size')?.addEventListener('click', saveMatrixSize);
+  $('btn-clear-matrix-form')?.addEventListener('click', () => { clearMatrixForm(); toast('Форма матрицы очищена'); });
 
-  $('btn-fill-from-gom').addEventListener('click', () => {
-    fillMatrixFromGom();
-    toast('Скопировано');
-  });
-
-  $('btn-clear-matrix-form').addEventListener('click', () => clearMatrixForm());
-
-  $('btn-save-size').addEventListener('click', async () => {
-    const size = getVal('matrix_size');
-    const meas = collectMatrixMeasurements();
-    const err = validateMatrix(size, meas);
-    if (err) { toast(err, false); return; }
-
-    if (!state.v31) return;
-    if (!state.v31.size_matrix) state.v31.size_matrix = {};
-    state.v31.size_matrix[size] = { measured: true, measurements: meas };
-
-    try {
-      await saveCurrentGarment(true);
-      renderMatrixList();
-      toast(`Размер ${size} сохранён`);
-    } catch (e) {
-      toast(String(e.message || e), false);
-    }
-  });
-
-  $('btn-send-feedback').addEventListener('click', async () => {
-    try {
-      await sendFeedback();
-    } catch (e) {
-      toast(String(e.message || e), false);
-    }
-  });
+  $('btn-send-feedback')?.addEventListener('click', sendFeedback);
 }
 
-async function init() {
+function init() {
   buildSizesGrid();
   bindEvents();
   resetState();
-  await refreshList(false);
-  await loadProfiles();
-
-  const url = new URL(window.location.href);
-  const sku = url.searchParams.get('sku');
-  if (sku) {
-    setVal('load_sku', sku);
-    await loadBySku(sku);
-  }
+  refreshList();
+  loadProfilesToFeedback();
+  setActiveTab('theory');
 }
 
 window.addEventListener('DOMContentLoaded', init);
+
 

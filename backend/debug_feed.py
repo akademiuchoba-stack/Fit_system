@@ -1,191 +1,221 @@
-import sqlite3
-import json
+import os
 import sys
+import json
 from pathlib import Path
 
 try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.prompt import Prompt
+    from rich.table import Table
 except ImportError:
     print("Ошибка: Установите библиотеку rich (pip install rich)")
-    sys.exit(1)
+    raise
 
-# Импортируем нашу математику напрямую
-from logic import Profile, calculate_fit, SIZES_ORDER, DESIGN_EASE
+# root -> чтобы работали imports "backend.*"
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(ROOT))
+
+from backend import database, models, logic
 
 console = Console()
-
-# --- УМНЫЕ ПУТИ ---
-BASE_DIR = Path(__file__).resolve().parent.parent
-DB_NAME = BASE_DIR / "shops" / "shop.db"
+BASE_DIR = ROOT
 USERS_FILE = Path(__file__).resolve().parent / "users.json"
+
 
 def load_users():
     if not USERS_FILE.exists():
         console.print(f"[red]Файл {USERS_FILE} не найден![/red]")
         sys.exit(1)
-    with open(USERS_FILE, 'r', encoding='utf-8') as f:
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def fetch_all_products():
-    if not DB_NAME.exists():
-        console.print(f"[red]База данных {DB_NAME} не найдена.[/red]")
-        return []
-    
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    c.execute("SELECT sku, name, metrics, platform FROM garments WHERE in_stock = 1")
-    rows = c.fetchall()
-    conn.close()
-    
-    products = []
-    for row in rows:
-        try:
-            metrics = json.loads(row[2]) if row[2] else {}
-            products.append({'sku': row[0], 'name': row[1], 'metrics': metrics, 'platform': row[3]})
-        except: 
-            continue
-    return products
 
-def main():
-    console.clear()
-    console.print(Panel("[bold cyan]FIT SYSTEM: A/B Тестирование (Теория vs Ground Truth)[/bold cyan]", expand=False))
+def build_buyer_from_user(u: dict):
+    # buyer measurements are full circumferences; engine does half conversions internally where needed
+    return {
+        "gender": (u.get("gender") or "male").lower(),
+        "measurements": {
+            "chest": u.get("chest"),
+            "waist_top": u.get("waist_top"),
+            "belly": u.get("belly"),
+            "hips": u.get("hips"),
+            "waist_bottom": u.get("waist_bottom"),
+            "high_hip": u.get("high_hip"),
+            "thigh": u.get("thigh"),
+            "bicep": u.get("bicep"),
+            "shoulders": u.get("shoulders"),
+            "arm_length": u.get("arm_length"),
+            "sleeve": u.get("arm_length"),
+            "inseam": u.get("inseam"),
+            "outseam": u.get("leg_length"),
+        },
+        "problem_zones": u.get("problem_zones") or [],
+        "comfort_C": u.get("comfort_C") or {},
+    }
 
-    users_data = load_users()
-    products = fetch_all_products()
 
-    if not products:
-        console.print("[yellow]В базе нет активных товаров для тестирования.[/yellow]")
-        return
-
-    # 1. Выбор пользователя
-    console.print("\n[bold]Доступные профили:[/bold]")
-    for idx, u in enumerate(users_data):
-        console.print(f"[{idx}] {u['name']} (Рост: {u['height']}, Грудь: {u['chest']})")
-    
-    u_idx = Prompt.ask("\nВыберите номер пользователя", default="0")
-    try:
-        u_data = users_data[int(u_idx)]
-    except (ValueError, IndexError):
-        console.print("[red]Неверный выбор![/red]")
-        return
-
-    user = Profile(
-        height=float(u_data.get('height', 175)),
-        chest=float(u_data.get('chest', 100)),
-        waist=float(u_data.get('waist', 85)),
-        hips=float(u_data.get('hips', 100)),
-        shoulders=float(u_data.get('shoulders', 45)),
-        arm_length=float(u_data.get('arm_length', 62)),
-        outseam=float(u_data.get('leg_length', 105)),
-        inseam=float(u_data.get('inseam', 80))
+def fetch_products(db):
+    items = (
+        db.query(models.Garment)
+        .filter(models.Garment.in_stock == True)
+        .order_by(models.Garment.id.desc())
+        .all()
     )
 
-    console.print(f"\n[bold green]✅ Выбран пользователь: {u_data['name']}[/bold green]")
+    out = []
+    for g in items:
+        metrics = g.metrics or {}
+        if isinstance(metrics, dict) and metrics.get("schema_version") == "v3.1" and isinstance(metrics.get("v31"), dict):
+            out.append(g)
+    return out
 
-    # 2. Перебор товаров
-    for item in products:
-        metrics = item['metrics']
-        if not metrics: continue
-        
-        theory = metrics.get('theory', {})
-        ground_truth = metrics.get('ground_truth', {})
 
-        if not theory: continue
+def pick_product(products):
+    table = Table(title="Товары v3.1 (in_stock)")
+    table.add_column("#", style="bold")
+    table.add_column("SKU", style="cyan")
+    table.add_column("Name")
+    table.add_column("Type", style="magenta")
+    table.add_column("Sizes", style="green")
 
-        cat_type = theory.get('category_type', 'top')
-        fit_profile = theory.get('fit_profile', 'regular')
-        elastane = theory.get('elastane_pct', 0)
-        model_size = theory.get('model_size', 'M')
+    for i, g in enumerate(products, start=1):
+        v31 = (g.metrics or {}).get("v31", {})
+        prod = v31.get("product", {}) or {}
+        table.add_row(
+            str(i),
+            str(g.sku),
+            str(g.name or ""),
+            str(prod.get("garment_type") or ""),
+            ", ".join((prod.get("available_sizes") or []))
+        )
+    console.print(table)
 
-        console.print("\n" + "="*70)
-        console.print(f"[bold cyan]ТОВАР:[/bold cyan] {item['name']} (SKU: {item['sku']} | {item['platform'].upper()})")
-        console.print(f"[dim]Категория: {cat_type.upper()}, Силуэт: {fit_profile.upper()}, Эластан: {elastane}%[/dim]")
+    idx = Prompt.ask("Выберите товар (#)", default="1")
+    try:
+        n = int(idx)
+        return products[n - 1]
+    except Exception:
+        return products[0]
 
-        # ==========================================
-        # РАСЧЕТ А: ТЕОРИЯ (По данным с сайта)
-        # ==========================================
-        console.print("\n[bold magenta]--- РАСЧЕТ А: ПО ДАННЫМ МАГАЗИНА (ТЕОРИЯ) ---[/bold magenta]")
-        best_theory_score = -1
-        best_theory_size = None
-        
-        for target_size in ['S', 'M', 'L', 'XL', 'XXL']:
-            res = calculate_fit(user, model_size, theory, target_size)
-            if res.score > best_theory_score:
-                best_theory_score = res.score
-                best_theory_size = target_size
-            
-            # Выводим только более-менее подходящие размеры для краткости
-            if res.score > 30:
-                console.print(f"   [bold {res.status_color}]Размер {target_size:<3}[/bold {res.status_color}] | Оценка: {res.score:>3.0f}% | {res.status}")
-                if res.score > 60:
-                    for warn in res.warnings:
-                        console.print(f"      [yellow]! {warn}[/yellow]")
 
-        console.print(f"   [bold]Вывод алгоритма (Теория):[/bold] Рекомендуемый размер [magenta]{best_theory_size}[/magenta] ({best_theory_score:.0f}%)")
+def pick_user(users):
+    table = Table(title="Покупатели (users.json)")
+    table.add_column("#", style="bold")
+    table.add_column("Name", style="cyan")
+    table.add_column("Gender", style="magenta")
+    table.add_column("Chest", style="green")
+    table.add_column("Belly", style="yellow")
+    table.add_column("Hips", style="green")
 
-        # ==========================================
-        # РАСЧЕТ Б: GROUND TRUTH (Реальные замеры)
-        # ==========================================
-        console.print("\n[bold green]--- РАСЧЕТ Б: ПО РЕАЛЬНЫМ ЗАМЕРАМ РУЛЕТКОЙ ---[/bold green]")
-        
-        if not ground_truth:
-            console.print("   [dim]Реальных замеров для этой вещи пока нет.[/dim]")
-            continue
+    for i, u in enumerate(users, start=1):
+        table.add_row(
+            str(i),
+            str(u.get("name", "")),
+            str(u.get("gender", "")),
+            str(u.get("chest", "")),
+            str(u.get("belly", "")),
+            str(u.get("hips", "")),
+        )
+    console.print(table)
 
-        ideal_ease = DESIGN_EASE.get(fit_profile.lower(), DESIGN_EASE['regular'])
-        base_ease_chest = ideal_ease['top'] if cat_type.lower() == 'top' else ideal_ease['bottom']
-        base_ease_waist = ideal_ease['bottom']
-        base_ease_hips = ideal_ease['bottom']
+    idx = Prompt.ask("Выберите пользователя (#)", default="1")
+    try:
+        n = int(idx)
+        return users[n - 1]
+    except Exception:
+        return users[0]
 
-        best_gt_score = -1
-        best_gt_size = None
 
-        for gt_size, gt_meas in ground_truth.items():
-            # Реверс-инжиниринг: создаем "fake" модель, которая по габаритам 
-            # идеально совпадает с замером рулетки.
-            fake_base_data = {
-                'category_type': cat_type,
-                'fit_profile': fit_profile,
-                'elastane_pct': elastane,
-                'height': theory.get('height', 175.0), 
-            }
-            if 'chest' in gt_meas: fake_base_data['chest'] = gt_meas['chest'] - base_ease_chest
-            if 'waist' in gt_meas: fake_base_data['waist'] = gt_meas['waist'] - base_ease_waist
-            if 'hips' in gt_meas: fake_base_data['hips'] = gt_meas['hips'] - base_ease_hips
-            if 'inseam' in gt_meas: fake_base_data['inseam'] = gt_meas['inseam']
+def render_result(fit: dict):
+    best = fit.get("best_size")
+    score = fit.get("score")
+    conf = fit.get("confidence")
+    mode = fit.get("mode")
 
-            # Считаем посадку (target_size == model_size, чтобы отключить грейдирование)
-            res = calculate_fit(user, gt_size, fake_base_data, gt_size)
+    console.print(Panel(f"✅ best_size: [bold]{best}[/bold]\nscore: [bold]{score:.1f}%[/bold]\nconfidence: [bold]{conf:.1f}%[/bold]\nmode: [bold]{mode}[/bold]", title="Итог"))
 
-            if res.score > best_gt_score:
-                best_gt_score = res.score
-                best_gt_size = gt_size
+    allr = fit.get("all_results") or []
+    if not allr:
+        console.print("[yellow]Нет all_results[/yellow]")
+        return
 
-            console.print(f"   [bold {res.status_color}]Реальный {gt_size:<3}[/bold {res.status_color}] | Оценка: {res.score:>3.0f}% | {res.status}")
-            
-            # Выводим конкретику, почему оценка такая
-            for zone, txt in res.details.items():
-                # Убираем rich-теги из txt для красивого вывода
-                clean_txt = txt.replace('[green]', '').replace('[/green]', '')\
-                               .replace('[yellow]', '').replace('[/yellow]', '')\
-                               .replace('[red]', '').replace('[/red]', '')\
-                               .replace('[magenta]', '').replace('[/magenta]', '')
-                console.print(f"      - {zone}: {clean_txt}")
+    t = Table(title="X-Ray по размерам")
+    t.add_column("Size", style="bold")
+    t.add_column("Score", style="green")
+    t.add_column("Conf", style="cyan")
+    t.add_column("HardFail", style="red")
+    t.add_column("Warnings")
 
-        console.print(f"   [bold]Истинный размер (по рулетке):[/bold] [green]{best_gt_size}[/green] ({best_gt_score:.0f}%)")
+    for r in allr:
+        t.add_row(
+            str(r.get("size_label")),
+            f"{float(r.get('score') or 0):.1f}",
+            f"{float(r.get('confidence') or 0):.1f}",
+            "YES" if r.get("hard_fail") else "no",
+            "; ".join((r.get("warnings") or [])[:2]),
+        )
 
-        # АНАЛИТИЧЕСКИЙ ВЫВОД
-        if best_theory_size and best_gt_size:
-            if best_theory_size == best_gt_size:
-                console.print("\n   [bold bg green text white] ИТОГ: ДАННЫЕ МАГАЗИНА ТОЧНЫ. АЛГОРИТМ СОВПАЛ. [/bold bg green text white]")
-            else:
-                console.print(f"\n   [bold bg red text white] ИТОГ: ОШИБКА ДАННЫХ МАГАЗИНА! [/bold bg red text white]")
-                console.print(f"   Магазин продает это как '{best_theory_size}', но по реальным меркам это '{best_gt_size}'.")
+    console.print(t)
 
-    console.print("\n" + "="*70)
-    console.print("[bold green]Тестирование завершено.[/bold green]\n")
+    # show details for best
+    best_node = None
+    for r in allr:
+        if str(r.get("size_label")) == str(best):
+            best_node = r
+            break
+    if not best_node:
+        return
+
+    details = best_node.get("details") or []
+    if details:
+        dt = Table(title=f"Детали по зонам (size={best})")
+        dt.add_column("Zone", style="bold")
+        dt.add_column("Body")
+        dt.add_column("Garment")
+        dt.add_column("Δ")
+        dt.add_column("Status")
+        dt.add_column("Inferred")
+
+        for d in details:
+            dt.add_row(
+                str(d.get("label") or d.get("zone") or ""),
+                str(d.get("body")),
+                str(d.get("garment")),
+                str(d.get("delta")),
+                str(d.get("status")),
+                "yes" if d.get("inferred") else "no",
+            )
+        console.print(dt)
+
+
+def main():
+    users = load_users()
+    if not users:
+        console.print("[red]users.json пуст[/red]")
+        return
+
+    db = database.SessionLocal()
+    try:
+        products = fetch_products(db)
+        if not products:
+            console.print("[red]Нет товаров v3.1 в базе. Сначала создай через Builder или seed_db.py[/red]")
+            return
+
+        u = pick_user(users)
+        g = pick_product(products)
+
+        buyer = build_buyer_from_user(u)
+        v31 = (g.metrics or {}).get("v31")
+
+        console.print(Panel(f"Покупатель: [bold]{u.get('name')}[/bold]\nТовар: [bold]{g.sku}[/bold] — {g.name}", title="Запуск"))
+
+        fit = logic.calculate_fit_v31(buyer, v31)
+        render_result(fit)
+
+    finally:
+        db.close()
+
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,6 @@
-
 import os
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # 1. Определяем корень проекта (на один уровень выше папки backend)
@@ -24,7 +23,7 @@ SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # 4. Инициализация Engine с поддержкой WAL для MVP
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
+    SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False}
 )
 

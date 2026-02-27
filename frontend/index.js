@@ -8,6 +8,12 @@
   function hide(el){ if(el) el.classList.add('hidden'); }
   function esc(s){ return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function fmt(n){ const x = Number(n); return Number.isFinite(x) ? String(Math.round(x*10)/10) : '—'; }
+  function fmtSign(n){
+    const x = Number(n);
+    if(!Number.isFinite(x)) return '—';
+    const v = Math.round(x*10)/10;
+    return (v>0?`+${v}`:`${v}`);
+  }
 
   async function api(url, opts={}){
     const res = await fetch(url, { headers: {'Content-Type':'application/json', ...(opts.headers||{})}, ...opts });
@@ -21,239 +27,271 @@
 
   class App {
     constructor(){
-      this.state = { profiles: [], activeProfileId: Number(localStorage.getItem('fit_active_profile_id') || 0) || null, editProfileId: null, results: [], currentCard: null };
-
-      this.el = {
-        toast: qs('#toast'), activeProfile: qs('#active-profile'), mainView: qs('#main-view'), cabinetView: qs('#cabinet-view'),
-        cards: qs('#cards'), emptyState: qs('#empty-state'), btnOpenCabinet: qs('#btn-open-cabinet'), btnRefresh: qs('#btn-refresh'),
-        btnCabinet: qs('#btn-cabinet'), btnBack: qs('#btn-back'), btnAdmin: qs('#btn-admin'), profiles: qs('#profiles'), profilesEmpty: qs('#profiles-empty'),
-        form: qs('#profile-form'), formTitle: qs('#form-title'), btnClearForm: qs('#btn-clear-form'), btnCancelEdit: qs('#btn-cancel-edit'),
-        genderSelect: qs('#gender_select'), wrapUnderbust: qs('#wrap_underbust'), wrapLengthDress: qs('#wrap_length_dress'),
-        modal: qs('#modal'), btnCloseModal: qs('#btn-close-modal'), modalTitle: qs('#modal-title'), modalSubtitle: qs('#modal-subtitle'),
-        modalImage: qs('#modal-image'), modalScore: qs('#modal-score'), modalExplain: qs('#modal-explain'), modalMetrics: qs('#modal-metrics')
+      this.state = {
+        profiles: [],
+        activeProfileId: Number(localStorage.getItem('fit_active_profile_id') || 0) || null,
+        editProfileId: null,
+        results: [],
+        currentCard: null
       };
 
-      this.bind(); this.init();
+      this.el = {
+        toast: qs('#toast'),
+        activeProfile: qs('#active-profile'),
+        mainView: qs('#main-view'),
+        cabinetView: qs('#cabinet-view'),
+        cards: qs('#cards'),
+        emptyState: qs('#empty-state'),
+        btnOpenCabinet: qs('#btn-open-cabinet'),
+        btnRefresh: qs('#btn-refresh'),
+        btnCabinet: qs('#btn-cabinet'),
+        btnBack: qs('#btn-back'),
+        profiles: qs('#profiles'),
+        profilesEmpty: qs('#profiles-empty'),
+
+        // form
+        formTitle: qs('#form-title'),
+        name: qs('#name'),
+        gender: qs('#gender_select'),
+        chest: qs('#chest'),
+        waist_top: qs('#waist_top'),
+        belly: qs('#belly'),
+        hips: qs('#hips'),
+        waist_bottom: qs('#waist_bottom'),
+        high_hip: qs('#high_hip'),
+        thigh: qs('#thigh'),
+        bicep: qs('#bicep'),
+        shoulders: qs('#shoulders'),
+        arm_length: qs('#arm_length'),
+        inseam: qs('#inseam'),
+        leg_length: qs('#leg_length'),
+        pz_belly: qs('#pz_belly'),
+        pz_sleeve: qs('#pz_sleeve'),
+        pz_waist_bottom: qs('#pz_waist_bottom'),
+        btnSaveProfile: qs('#btn-save-profile'),
+        btnClearForm: qs('#btn-clear-form'),
+        btnCancelEdit: qs('#btn-cancel-edit'),
+
+        // modal
+        modal: qs('#modal'),
+        btnCloseModal: qs('#btn-close-modal'),
+        modalTitle: qs('#modal-title'),
+        modalSubtitle: qs('#modal-subtitle'),
+        modalImage: qs('#modal-image'),
+        modalScore: qs('#modal-score'),
+        modalExplain: qs('#modal-explain'),
+        modalMetrics: qs('#modal-metrics'),
+      };
+
+      this.bind();
+      this.init();
     }
 
-    toast(msg){
+    toast(msg, ok=true){
       if(!this.el.toast) return;
-      this.el.toast.textContent = msg; show(this.el.toast);
-      setTimeout(()=> hide(this.el.toast), 2500);
+      this.el.toast.classList.remove('hidden');
+      this.el.toast.textContent = msg;
+      this.el.toast.style.background = ok ? '#111827' : '#991B1B';
+      clearTimeout(this._toastTimer);
+      this._toastTimer = setTimeout(()=> this.el.toast.classList.add('hidden'), 2600);
     }
 
     bind(){
-      if(this.el.btnCabinet) this.el.btnCabinet.addEventListener('click', ()=> this.showCabinet());
-      if(this.el.btnOpenCabinet) this.el.btnOpenCabinet.addEventListener('click', ()=> this.showCabinet());
-      if(this.el.btnBack) this.el.btnBack.addEventListener('click', ()=> this.showMain());
-      if(this.el.btnRefresh) this.el.btnRefresh.addEventListener('click', ()=> this.refreshResults());
-      if(this.el.btnAdmin) this.el.btnAdmin.addEventListener('click', ()=> { window.location.href = '/admin'; });
-      if(this.el.btnCloseModal) this.el.btnCloseModal.addEventListener('click', ()=> this.closeModal());
-      if(this.el.modal) this.el.modal.addEventListener('click', (e)=> { if(e.target === this.el.modal) this.closeModal(); });
-      if(this.el.btnClearForm) this.el.btnClearForm.addEventListener('click', ()=> this.clearForm());
-      if(this.el.btnCancelEdit) this.el.btnCancelEdit.addEventListener('click', ()=> this.clearForm());
+      this.el.btnOpenCabinet?.addEventListener('click', ()=> this.openCabinet());
+      this.el.btnCabinet?.addEventListener('click', ()=> this.openCabinet());
+      this.el.btnBack?.addEventListener('click', ()=> this.closeCabinet());
+      this.el.btnRefresh?.addEventListener('click', ()=> this.refreshResults());
 
-      if(this.el.genderSelect) {
-          this.el.genderSelect.addEventListener('change', () => this.toggleGenderFields());
-      }
+      this.el.activeProfile?.addEventListener('change', () => {
+        const id = Number(this.el.activeProfile.value || 0) || null;
+        this.state.activeProfileId = id;
+        localStorage.setItem('fit_active_profile_id', String(id || 0));
+        this.refreshResults();
+      });
 
-      if(this.el.form){
-        this.el.form.addEventListener('submit', (e)=> {
-          e.preventDefault(); this.saveProfileFromForm().catch(err=> this.toast(err.message));
-        });
-      }
+      this.el.btnSaveProfile?.addEventListener('click', ()=> this.saveProfile());
+      this.el.btnClearForm?.addEventListener('click', ()=> this.clearForm());
+      this.el.btnCancelEdit?.addEventListener('click', ()=> this.cancelEdit());
+
+      this.el.btnCloseModal?.addEventListener('click', ()=> this.closeModal());
+      this.el.modal?.addEventListener('click', (e)=> { if(e.target === this.el.modal) this.closeModal(); });
     }
 
-    async init(){ await this.loadProfiles(); await this.refreshResults(); this.toggleGenderFields(); }
-
-    toggleGenderFields() {
-        if (!this.el.genderSelect) return;
-        const isFemale = this.el.genderSelect.value === 'female';
-        if (isFemale) { show(this.el.wrapUnderbust); show(this.el.wrapLengthDress); } 
-        else { hide(this.el.wrapUnderbust); hide(this.el.wrapLengthDress); }
-    }
-
-    showCabinet(){ hide(this.el.mainView); show(this.el.cabinetView); this.renderProfiles(); this.clearForm(); }
-    showMain(){ hide(this.el.cabinetView); show(this.el.mainView); }
-
-    setActiveProfile(id){
-      this.state.activeProfileId = id; localStorage.setItem('fit_active_profile_id', String(id || ''));
-      const p = this.state.profiles.find(x=> x.id === id);
-      if(this.el.activeProfile) this.el.activeProfile.textContent = p ? p.name : '—';
+    async init(){
+      await this.loadProfiles();
+      this.syncActiveProfileSelect();
+      await this.refreshResults();
     }
 
     async loadProfiles(){
-      const list = await api(API.profiles); this.state.profiles = Array.isArray(list) ? list : [];
-      const exists = this.state.activeProfileId && this.state.profiles.some(p=>p.id===this.state.activeProfileId);
-      if(!exists) this.state.activeProfileId = this.state.profiles[0]?.id || null;
-      this.setActiveProfile(this.state.activeProfileId);
+      try {
+        const data = await api(API.profiles);
+        this.state.profiles = Array.isArray(data) ? data : [];
+        this.renderProfiles();
+        this.renderActiveProfileSelect();
+      } catch(e){
+        this.toast('Ошибка загрузки профилей', false);
+      }
     }
+
+    renderActiveProfileSelect(){
+      const sel = this.el.activeProfile;
+      if(!sel) return;
+      sel.innerHTML = '';
+      const opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = '— Выберите профиль —';
+      sel.appendChild(opt0);
+
+      for(const p of this.state.profiles){
+        const opt = document.createElement('option');
+        opt.value = String(p.id);
+        opt.textContent = `${p.name || ('Profile ' + p.id)} (${p.gender || 'n/a'})`;
+        sel.appendChild(opt);
+      }
+      this.syncActiveProfileSelect();
+    }
+
+    syncActiveProfileSelect(){
+      if(!this.el.activeProfile) return;
+      const id = this.state.activeProfileId;
+      if(id) this.el.activeProfile.value = String(id);
+    }
+
+    openCabinet(){ hide(this.el.mainView); show(this.el.cabinetView); }
+    closeCabinet(){ hide(this.el.cabinetView); show(this.el.mainView); }
 
     renderProfiles(){
       if(!this.el.profiles) return;
-      this.el.profiles.innerHTML = ''; const items = this.state.profiles;
-      if(!items.length) { show(this.el.profilesEmpty); return; }
+      this.el.profiles.innerHTML = '';
+      if(!this.state.profiles.length){
+        show(this.el.profilesEmpty); return;
+      }
       hide(this.el.profilesEmpty);
 
-      for(const p of items){
-        const isActive = p.id === this.state.activeProfileId;
-        const row = document.createElement('div');
-        row.className = `p-4 rounded-2xl border ${isActive ? 'border-indigo-200 bg-indigo-50/50' : 'border-gray-100 bg-white'} hover:border-indigo-200 transition cursor-pointer`;
-        row.innerHTML = `
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <div class="font-black text-lg truncate">${esc(p.name)}</div>
-                ${isActive ? `<span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 rounded-full bg-indigo-600 text-white">активен</span>` : ''}
-              </div>
-              <div class="text-xs text-gray-500 mt-1">Рост: ${fmt(p.height)}см | Грудь: ${fmt(p.chest)}см</div>
-            </div>
+      for(const p of this.state.profiles){
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-2xl border border-gray-200 bg-white flex items-center justify-between gap-2';
+        card.innerHTML = `
+          <div>
+            <div class="font-black">${esc(p.name || ('Profile ' + p.id))}</div>
+            <div class="text-xs text-gray-500 mt-0.5">ID ${p.id} • ${esc(p.gender || '—')}</div>
           </div>
-          <div class="mt-4 flex flex-wrap gap-2">
-            <button data-act="activate" class="px-4 py-2 rounded-xl bg-gray-900 text-white font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-600 transition shadow-sm">Выбрать</button>
-            <button data-act="edit" class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-gray-50 transition shadow-sm">Изменить</button>
-            <button data-act="delete" class="px-4 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-rose-50 transition shadow-sm">Удалить</button>
-          </div>`;
-        row.addEventListener('click', (e)=> {
-          const btn = e.target?.closest('button[data-act]');
-          if(!btn) { this.setActiveProfile(p.id); this.refreshResults().catch(()=>{}); return; }
-          e.preventDefault(); e.stopPropagation();
-          const act = btn.getAttribute('data-act');
-          if(act==='activate'){ this.setActiveProfile(p.id); this.toast(`Активен: ${p.name}`); this.refreshResults().catch(()=>{}); }
-          else if(act==='edit'){ this.loadProfileIntoForm(p); }
-          else if(act==='delete'){ if(confirm('Удалить профиль?')) this.deleteProfile(p.id).catch(err=> this.toast(err.message)); }
+          <div class="flex gap-2">
+            <button data-act="use" data-id="${p.id}" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700">Активировать</button>
+          </div>
+        `;
+        card.querySelector('[data-act="use"]').addEventListener('click', ()=>{
+          this.state.activeProfileId = Number(p.id);
+          localStorage.setItem('fit_active_profile_id', String(p.id));
+          this.renderActiveProfileSelect();
+          this.closeCabinet();
+          this.refreshResults();
         });
-        this.el.profiles.appendChild(row);
+        this.el.profiles.appendChild(card);
       }
     }
 
-    loadProfileIntoForm(p){
-      this.state.editProfileId = p.id;
-      if(this.el.formTitle) this.el.formTitle.textContent = `Редактирование: ${p.name}`;
-      const f = this.el.form; if(!f) return;
-      
-      f.name.value = p.name ?? ''; f.gender.value = p.gender ?? 'male'; f.height.value = p.height ?? '';
-      f.b_neck.value = p.neck ?? ''; f.b_shoulders.value = p.shoulders ?? ''; f.b_back_width.value = p.back_width ?? '';
-      f.b_chest.value = p.chest ?? ''; f.b_underbust.value = p.underbust ?? ''; f.b_waist_top.value = p.waist_top ?? ''; 
-      f.b_bicep.value = p.bicep ?? ''; f.b_arm_length.value = p.arm_length ?? ''; f.b_length_dress.value = p.length_dress ?? '';
-      f.b_waist_bottom.value = p.waist_bottom ?? ''; f.b_belly.value = p.belly ?? ''; f.b_high_hip.value = p.high_hip ?? ''; 
-      f.b_hips.value = p.hips ?? ''; f.b_thigh.value = p.thigh ?? ''; f.b_knee.value = p.knee ?? ''; f.b_calf.value = p.calf ?? ''; 
-      f.b_outseam.value = p.leg_length ?? ''; f.b_inseam.value = p.inseam ?? ''; f.id.value = p.id ?? '';
-
-      this.toggleGenderFields();
-
-      const pz = p.problem_zones || [];
-      ['shoulders', 'chest', 'belly', 'hips', 'thigh', 'bicep'].forEach(z => {
-          if (f['pz_'+z]) f['pz_'+z].checked = pz.includes(z);
-      });
-
-      const c = p.comfort_C || {};
-      if(c.top) {
-          f.c_top_shoulders.value = c.top.shoulders ?? ''; f.c_top_back.value = c.top.back_width ?? '';
-          f.c_top_chest.value = c.top.chest ?? ''; f.c_top_waist.value = c.top.waist_top ?? '';
-          f.c_top_hem.value = c.top.hem_top ?? ''; f.c_top_length.value = c.top.length_top ?? '';
-          f.c_top_sleeve.value = c.top.sleeve ?? ''; f.c_top_bicep.value = c.top.bicep ?? '';
-      } else {
-          f.c_top_shoulders.value = ''; f.c_top_back.value = ''; f.c_top_chest.value = ''; f.c_top_waist.value = '';
-          f.c_top_hem.value = ''; f.c_top_length.value = ''; f.c_top_sleeve.value = ''; f.c_top_bicep.value = '';
-      }
-      
-      if(c.bottom) {
-          f.c_bot_waist.value = c.bottom.waist_bottom ?? ''; f.c_bot_high_hip.value = c.bottom.high_hip ?? '';
-          f.c_bot_hips.value = c.bottom.hips ?? ''; f.c_bot_thigh.value = c.bottom.thigh ?? '';
-          f.c_bot_knee.value = c.bottom.knee ?? ''; f.c_bot_opening.value = c.bottom.leg_opening ?? '';
-          f.c_bot_inseam.value = c.bottom.inseam ?? ''; f.c_bot_outseam.value = c.bottom.outseam ?? '';
-          f.c_bot_front_rise.value = c.bottom.front_rise ?? ''; f.c_bot_back_rise.value = c.bottom.back_rise ?? '';
-      } else {
-          f.c_bot_waist.value = ''; f.c_bot_high_hip.value = ''; f.c_bot_hips.value = ''; f.c_bot_thigh.value = '';
-          f.c_bot_knee.value = ''; f.c_bot_opening.value = ''; f.c_bot_inseam.value = ''; f.c_bot_outseam.value = '';
-          f.c_bot_front_rise.value = ''; f.c_bot_back_rise.value = '';
-      }
-      show(this.el.btnCancelEdit);
+    _problemZonesFromForm(){
+      const zones = [];
+      if(this.el.pz_belly?.checked) zones.push('belly');
+      if(this.el.pz_sleeve?.checked) zones.push('sleeve');
+      if(this.el.pz_waist_bottom?.checked) zones.push('waist_bottom');
+      return zones;
     }
 
     clearForm(){
       this.state.editProfileId = null;
-      if(this.el.formTitle) this.el.formTitle.textContent = 'Новый профиль';
-      const f = this.el.form; if(!f) return;
-      f.reset(); f.id.value = ''; this.toggleGenderFields();
-      hide(this.el.btnCancelEdit);
-    }
-
-    async saveProfileFromForm(){
-      const f = this.el.form; if(!f) return;
-      
-      const problem_zones = [];
-      ['shoulders', 'chest', 'belly', 'hips', 'thigh', 'bicep'].forEach(z => {
-          if (f['pz_'+z] && f['pz_'+z].checked) problem_zones.push(z);
+      this.el.formTitle.textContent = 'Новый профиль';
+      this.el.btnCancelEdit.classList.add('hidden');
+      ['name','chest','waist_top','belly','hips','waist_bottom','high_hip','thigh','bicep','shoulders','arm_length','inseam','leg_length'].forEach(id=>{
+        const el = qs('#'+id);
+        if(el) el.value = '';
       });
-
-      const comfort_C = {};
-      const tKeys = ['shoulders', 'back', 'chest', 'waist', 'hem', 'length', 'sleeve', 'bicep'];
-      const tMap = {'back':'back_width', 'waist':'waist_top', 'hem':'hem_top', 'length':'length_top'};
-      let hasTop = false; comfort_C.top = {};
-      tKeys.forEach(k => { const val = Number(f['c_top_'+k]?.value); if (val) { comfort_C.top[tMap[k] || k] = val; hasTop = true; } });
-      if (!hasTop) delete comfort_C.top;
-
-      const bKeys = ['waist', 'high_hip', 'hips', 'thigh', 'knee', 'opening', 'inseam', 'outseam', 'front_rise', 'back_rise'];
-      const bMap = {'waist':'waist_bottom', 'opening':'leg_opening'};
-      let hasBot = false; comfort_C.bottom = {};
-      bKeys.forEach(k => { const val = Number(f['c_bot_'+k]?.value); if (val) { comfort_C.bottom[bMap[k] || k] = val; hasBot = true; } });
-      if (!hasBot) delete comfort_C.bottom;
-
-      const payload = {
-        name: f.name.value.trim(), gender: f.gender.value, height: Number(f.height.value || 0),
-        neck: Number(f.b_neck.value || 0) || null, shoulders: Number(f.b_shoulders.value || 0) || null,
-        back_width: Number(f.b_back_width.value || 0) || null, chest: Number(f.b_chest.value || 0) || null,
-        underbust: Number(f.b_underbust.value || 0) || null, waist_top: Number(f.b_waist_top.value || 0) || null, 
-        belly: Number(f.b_belly.value || 0) || null, bicep: Number(f.b_bicep.value || 0) || null,
-        arm_length: Number(f.b_arm_length.value || 0) || null, length_dress: Number(f.b_length_dress.value || 0) || null,
-        waist_bottom: Number(f.b_waist_bottom.value || 0) || null, high_hip: Number(f.b_high_hip.value || 0) || null, 
-        hips: Number(f.b_hips.value || 0) || null, thigh: Number(f.b_thigh.value || 0) || null, 
-        knee: Number(f.b_knee.value || 0) || null, calf: Number(f.b_calf.value || 0) || null, 
-        leg_length: Number(f.b_outseam.value || 0) || null, inseam: Number(f.b_inseam.value || 0) || null,
-        problem_zones: problem_zones, comfort_C: Object.keys(comfort_C).length > 0 ? comfort_C : null
-      };
-
-      if(!payload.name) throw new Error('Имя профиля обязательно');
-
-      if(this.state.editProfileId){
-        await api(`/api/profiles/${this.state.editProfileId}`, {method:'PUT', body: JSON.stringify(payload)});
-        this.toast('Профиль обновлён');
-      } else {
-        await api(`/api/profiles`, {method:'POST', body: JSON.stringify(payload)});
-        this.toast('Профиль создан');
-      }
-      await this.loadProfiles(); this.renderProfiles(); this.clearForm(); await this.refreshResults();
+      this.el.gender.value = 'male';
+      this.el.pz_belly.checked = false;
+      this.el.pz_sleeve.checked = false;
+      this.el.pz_waist_bottom.checked = false;
     }
 
-    async deleteProfile(id){
-      await api(`/api/profiles/${id}`, {method:'DELETE'}); this.toast('Удалено');
-      await this.loadProfiles(); this.renderProfiles(); await this.refreshResults();
+    cancelEdit(){
+      this.clearForm();
+      this.toast('Отмена');
+    }
+
+    async saveProfile(){
+      const name = (this.el.name.value || '').trim();
+      if(!name){ this.toast('Укажите имя профиля', false); return; }
+      const payload = {
+        name,
+        gender: this.el.gender.value,
+        chest: Number(this.el.chest.value || 0) || null,
+        waist_top: Number(this.el.waist_top.value || 0) || null,
+        belly: Number(this.el.belly.value || 0) || null,
+        hips: Number(this.el.hips.value || 0) || null,
+        waist_bottom: Number(this.el.waist_bottom.value || 0) || null,
+        high_hip: Number(this.el.high_hip.value || 0) || null,
+        thigh: Number(this.el.thigh.value || 0) || null,
+        bicep: Number(this.el.bicep.value || 0) || null,
+        shoulders: Number(this.el.shoulders.value || 0) || null,
+        arm_length: Number(this.el.arm_length.value || 0) || null,
+        inseam: Number(this.el.inseam.value || 0) || null,
+        leg_length: Number(this.el.leg_length.value || 0) || null,
+        problem_zones: this._problemZonesFromForm(),
+        comfort_C: {}
+      };
+      try {
+        await api('/api/profiles', { method:'POST', body: JSON.stringify(payload) });
+        this.toast('Профиль сохранён');
+        await this.loadProfiles();
+      } catch(e){
+        this.toast('Ошибка сохранения профиля', false);
+      }
     }
 
     async refreshResults(){
-      if(!this.state.activeProfileId){ this.state.results = []; this.renderCards(); return; }
+      if(!this.state.activeProfileId){
+        this.state.results = [];
+        this.renderCards();
+        show(this.el.emptyState);
+        return;
+      }
       try {
         const data = await api(API.calculate(50), { method: 'POST', body: JSON.stringify({ profile_id: this.state.activeProfileId }) });
-        this.state.results = Array.isArray(data) ? data : []; this.renderCards();
-      } catch (e) { this.toast('Ошибка загрузки рекомендаций'); }
+        this.state.results = Array.isArray(data) ? data : [];
+        this.renderCards();
+      } catch (e) {
+        this.toast('Ошибка загрузки рекомендаций', false);
+      }
     }
 
     renderCards(){
-      if(!this.el.cards) return; this.el.cards.innerHTML = ''; const list = this.state.results;
-      if(!list.length){ show(this.el.emptyState); return; }
+      if(!this.el.cards) return;
+      this.el.cards.innerHTML = '';
+      const list = this.state.results;
+      if(!list.length){
+        show(this.el.emptyState);
+        return;
+      }
       hide(this.el.emptyState);
 
       for(const r of list){
         const card = document.createElement('div');
         card.className = 'bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-xl transition-all cursor-pointer flex flex-col transform hover:-translate-y-1';
 
-        const img = r?.image_url || PLACEHOLDER_IMG; const scoreVal = Number(r?.score ?? 0);
+        const img = r?.image_url || PLACEHOLDER_IMG;
+        const scoreVal = Number(r?.score ?? 0);
+        const confVal = Number(r?.confidence ?? 0);
+
         let scoreColor = 'text-green-600 bg-green-50 border-green-200';
         if (scoreVal < 80) scoreColor = 'text-cyan-600 bg-cyan-50 border-cyan-200';
         if (scoreVal < 60) scoreColor = 'text-yellow-600 bg-yellow-50 border-yellow-200';
         if (scoreVal < 40) scoreColor = 'text-red-600 bg-red-50 border-red-200';
+
+        let confColor = 'text-green-700 bg-green-50 border-green-200';
+        if (confVal < 80) confColor = 'text-cyan-700 bg-cyan-50 border-cyan-200';
+        if (confVal < 60) confColor = 'text-yellow-700 bg-yellow-50 border-yellow-200';
+        if (confVal < 40) confColor = 'text-red-700 bg-red-50 border-red-200';
 
         const explainParts = (r?.explain || '').split('|').map(s => s.trim()).filter(Boolean);
         const mainVerdict = explainParts[0] || 'Нет данных';
@@ -261,7 +299,10 @@
         card.innerHTML = `
           <div class="aspect-[4/5] bg-gray-50 overflow-hidden relative">
             <img src="${esc(img)}" onerror="this.src='${PLACEHOLDER_IMG}'" class="w-full h-full object-cover"/>
-            <div class="absolute top-3 right-3 px-3 py-1.5 rounded-xl border font-black text-sm shadow-md backdrop-blur-md ${scoreColor}">${Math.round(scoreVal)}%</div>
+            <div class="absolute top-3 right-3 flex flex-col gap-2 items-end">
+              <div class="px-3 py-1.5 rounded-xl border font-black text-sm shadow-md backdrop-blur-md ${scoreColor}">${Math.round(scoreVal)}%</div>
+              <div class="px-3 py-1 rounded-xl border font-extrabold text-[11px] shadow-md backdrop-blur-md ${confColor}">conf ${Math.round(confVal)}%</div>
+            </div>
           </div>
           <div class="p-5 flex flex-col flex-1">
             <div class="font-black text-lg truncate">${esc(r?.name || r?.sku || '—')}</div>
@@ -271,66 +312,127 @@
               <div class="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Размер: <span class="text-black text-lg ml-1">${esc(r?.best_size || '—')}</span></div>
             </div>
           </div>`;
-        card.addEventListener('click', ()=> this.openModal(r)); this.el.cards.appendChild(card);
+
+        card.addEventListener('click', ()=> this.openModal(r));
+        this.el.cards.appendChild(card);
       }
     }
 
     openModal(r){
       this.state.currentCard = r;
+
       if(this.el.modalTitle) this.el.modalTitle.textContent = r?.name || r?.sku || '—';
-      if(this.el.modalSubtitle) this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${r?.sku} • Рекомендация: ${r?.best_size || '—'}`;
+      if(this.el.modalSubtitle) {
+        const mode = (r?.explain || '').split('(')[1]?.split(')')[0] || '—';
+        this.el.modalSubtitle.textContent = `${r?.platform || ''} • SKU ${r?.sku} • Рекомендация: ${r?.best_size || '—'} • ${mode}`;
+      }
       if(this.el.modalImage) this.el.modalImage.src = r?.image_url || PLACEHOLDER_IMG;
       if(this.el.modalScore) this.el.modalScore.textContent = Math.round(Number(r?.score ?? 0)) + '%';
 
+      const confVal = Number(r?.confidence ?? 0);
+      const modeStr = (r?.explain || '').split('(')[1]?.split(')')[0] || 'STANDARD';
+
       if(this.el.modalExplain) {
         this.el.modalExplain.innerHTML = `
-          <div class="mt-2 pt-4 border-t border-gray-100 flex gap-2">
-            <a href="/builder?sku=${encodeURIComponent(r?.sku || '')}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
-              ✎ Настроить (Builder)
+          <div class="flex flex-wrap gap-2 items-center">
+            <span class="px-3 py-1.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-black">Confidence: ${Math.round(confVal)}%</span>
+            <span class="px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 text-xs font-black text-indigo-700">Mode: ${esc(modeStr)}</span>
+            <a href="/builder?sku=${encodeURIComponent(r?.sku || '')}" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-black text-xs hover:bg-indigo-700 transition">
+              ✎ Builder
             </a>
-          </div>`;
+          </div>
+        `;
       }
+
+      // v31 xray rendering
+      const sizesChips = (r.available_sizes || []).map(sz =>
+        `<span class="px-3 py-1 bg-white border border-gray-200 text-gray-800 font-black text-xs rounded-lg shadow-sm">${esc(sz)}</span>`
+      ).join('');
 
       let xrayHtml = `
         <div class="text-[11px] uppercase tracking-widest text-gray-400 font-extrabold mb-2">Размеры в наличии:</div>
-        <div class="flex gap-2 flex-wrap mb-6">
-            ${(r.available_sizes || []).map(sz => `<span class="px-3 py-1 bg-white border border-gray-200 text-gray-800 font-black text-xs rounded-lg shadow-sm">${sz}</span>`).join('')}
-        </div>
-        <div class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-3">Рентген посадки (Матрица IP 2.0)</div>
-        <div class="space-y-4">`;
-      
-      (r.xray || []).forEach(sz => {
-          let isRec = sz.size_label === r.best_size;
-          let colorClass = 'border-gray-200 bg-white';
-          if (sz.hard_fit === 'FAIL') colorClass = 'border-red-200 bg-red-50 text-red-900 opacity-60';
-          else if (isRec) colorClass = 'border-indigo-300 bg-indigo-50/50 shadow-md ring-2 ring-indigo-100';
-          
-          let zonesHtml = (sz.xray_zones || []).map(z => `
-              <div class="flex flex-col sm:flex-row sm:justify-between text-[11px] py-1.5 border-b border-gray-100/50 last:border-0 hover:bg-gray-50/50 transition px-1 rounded">
-                  <span class="sm:w-1/3 truncate font-bold text-gray-700 flex items-center gap-1">
-                      ${z.zone_name} 
-                      ${z.inferred ? '<span class="text-[8px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded uppercase tracking-wider">Inferred</span>' : ''}
-                  </span>
-                  <span class="sm:w-1/3 text-gray-500 font-mono text-[10px]">C:${fmt(z.target_val)} → В:${fmt(z.garment_val)}</span>
-                  <span class="sm:w-1/3 sm:text-right font-bold ${z.penalty > 0 ? 'text-red-500' : 'text-green-600'}">${z.status} (${fmt(z.delta_eff)}см)</span>
-              </div>
-          `).join('');
+        <div class="flex gap-2 flex-wrap mb-6">${sizesChips || '<span class="text-sm text-gray-500">—</span>'}</div>
 
-          xrayHtml += `
-              <div class="rounded-2xl border ${colorClass} p-4 transition-all overflow-hidden">
-                  <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-100/50">
-                      <div class="font-black text-base flex items-center gap-2">
-                          Размер ${sz.size_label} 
-                          ${!sz.is_available ? '<span class="text-[9px] uppercase tracking-widest bg-gray-200 text-gray-500 px-2 py-1 rounded-md">Теория</span>' : ''}
-                      </div>
-                      <div class="font-black text-sm ${sz.hard_fit === 'FAIL' ? 'text-red-600' : 'text-indigo-600'}">${Math.round(sz.score)}% - ${sz.global_status}</div>
-                  </div>
-                  <div>${zonesHtml}</div>
-                  ${(sz.warnings || []).length ? `<div class="mt-3 text-[10px] text-red-600 font-bold bg-white p-2 rounded-xl border border-red-100 shadow-sm leading-relaxed">${sz.warnings.join('<br>')}</div>` : ''}
-              </div>`;
-      });
+        <div class="text-[11px] uppercase tracking-widest text-indigo-600 font-extrabold mb-3">Рентген посадки (v3.1)</div>
+      `;
+
+      const all = Array.isArray(r.xray) ? r.xray : [];
+      if(!all.length){
+        xrayHtml += `<div class="text-sm text-gray-500">Нет данных матрицы.</div>`;
+        this.el.modalMetrics.innerHTML = xrayHtml;
+        show(this.el.modal);
+        return;
+      }
+
+      const bestSize = r.best_size;
+
+      xrayHtml += `<div class="space-y-4">`;
+
+      for(const sz of all){
+        const isRec = String(sz.size_label) === String(bestSize);
+        const hardFail = !!sz.hard_fail;
+
+        let boxClass = 'border-gray-200 bg-white';
+        if (hardFail) boxClass = 'border-red-200 bg-red-50 text-red-900 opacity-80';
+        else if (isRec) boxClass = 'border-indigo-300 bg-indigo-50/50 shadow-md ring-2 ring-indigo-100';
+
+        const score = Math.round(Number(sz.score ?? 0));
+        const conf = Math.round(Number(sz.confidence ?? 0));
+        const status = esc(sz.global_status || '');
+
+        const warnings = (sz.warnings || []).slice(0,4).map(w =>
+          `<div class="text-[11px] text-red-700">• ${esc(w)}</div>`
+        ).join('');
+
+        const details = Array.isArray(sz.details) ? sz.details : [];
+        const rows = details.map(d => {
+          const st = String(d.status || '');
+          let stBadge = 'bg-green-50 text-green-700 border-green-200';
+          if (st === 'TIGHT') stBadge = 'bg-red-50 text-red-700 border-red-200';
+          if (st === 'LOOSE') stBadge = 'bg-amber-50 text-amber-800 border-amber-200';
+
+          return `
+            <div class="grid grid-cols-12 gap-2 text-[11px] py-1.5 border-b border-gray-100/60 last:border-0">
+              <div class="col-span-5 font-bold text-gray-700 flex items-center gap-2">
+                <span class="truncate">${esc(d.label || d.zone)}</span>
+                ${d.inferred ? `<span class="text-[9px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200 font-extrabold uppercase">inferred</span>` : ``}
+              </div>
+              <div class="col-span-2 text-gray-600">Тело: <b>${fmt(d.body)}</b></div>
+              <div class="col-span-2 text-gray-600">Вещь: <b>${fmt(d.garment)}</b></div>
+              <div class="col-span-2 text-gray-600">Δ: <b>${fmtSign(d.delta)}</b></div>
+              <div class="col-span-1 flex justify-end">
+                <span class="px-2 py-0.5 rounded-full border ${stBadge} font-extrabold">${esc(st)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        xrayHtml += `
+          <div class="p-4 rounded-2xl border ${boxClass}">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="font-black text-lg">Размер ${esc(sz.size_label)}</div>
+                <div class="text-xs text-gray-600 mt-0.5">${status}</div>
+              </div>
+              <div class="flex gap-2">
+                <span class="px-3 py-1 rounded-xl border border-gray-200 bg-white text-xs font-black">${score}%</span>
+                <span class="px-3 py-1 rounded-xl border border-gray-200 bg-white text-xs font-extrabold">conf ${conf}%</span>
+              </div>
+            </div>
+
+            ${warnings ? `<div class="mt-3">${warnings}</div>` : ``}
+
+            <div class="mt-4 rounded-xl border border-gray-200 bg-white p-3">
+              <div class="text-[10px] uppercase tracking-widest text-gray-400 font-extrabold mb-2">Зоны</div>
+              ${rows || `<div class="text-sm text-gray-500">Нет деталей</div>`}
+            </div>
+          </div>
+        `;
+      }
+
       xrayHtml += `</div>`;
-      if(this.el.modalMetrics) this.el.modalMetrics.innerHTML = xrayHtml;
+
+      this.el.modalMetrics.innerHTML = xrayHtml;
       show(this.el.modal);
     }
 

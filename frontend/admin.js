@@ -1,186 +1,181 @@
 (() => {
   const API = {
     stats: '/api/admin/stats',
-    updateDb: '/api/admin/update-db',
-    garments: (q='', limit=50) => `/api/admin/garments?search=${encodeURIComponent(q)}&limit=${encodeURIComponent(limit)}`,
-    profiles: '/api/profiles',
-    builderDelete: (sku) => `/api/admin/builder/delete?sku=${encodeURIComponent(sku)}`,
+    garments: '/api/admin/garments',
+    del: (sku) => `/api/admin/builder/delete?sku=${encodeURIComponent(sku)}`,
   };
 
-  const qs = (s, r=document) => r.querySelector(s);
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-  
-  function show(el){ if(el) el.classList.remove('hidden'); }
-  function hide(el){ if(el) el.classList.add('hidden'); }
+  const $ = (id) => document.getElementById(id);
 
-  function toast(msg){
-    const el = qs('#toast');
-    if(!el) return;
-    el.textContent = msg;
-    show(el);
-    setTimeout(()=> hide(el), 3000);
+  function toast(msg, ok=true){
+    const t = $('toast');
+    if(!t) return;
+    t.classList.remove('hidden');
+    t.textContent = msg;
+    t.style.background = ok ? '#111827' : '#991B1B';
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => t.classList.add('hidden'), 2600);
   }
+
+  function esc(s){ return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
   async function api(url, opts={}){
-    const res = await fetch(url, {headers:{'Content-Type':'application/json'}, ...opts});
-    const ct = res.headers.get('content-type') || '';
-    const body = ct.includes('application/json') ? await res.json().catch(()=> ({})) : await res.text().catch(()=> '');
+    const res = await fetch(url, { headers: {'Content-Type':'application/json', ...(opts.headers||{})}, ...opts });
     if(!res.ok){
-      const msg = typeof body === 'string' ? body : (body?.detail || JSON.stringify(body));
-      throw new Error(`${res.status} ${res.statusText}: ${msg}`);
+      const txt = await res.text().catch(()=> '');
+      throw new Error(`${res.status} ${res.statusText}${txt?`: ${txt}`:''}`);
     }
-    return body;
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : res.text();
   }
 
-  async function updateDb(){
-    const btn = qs('#btn-update-db');
-    if(btn) btn.disabled = true;
-    toast('Очищаю кэш сервера...');
-    try{
-      const r = await api(API.updateDb, {method:'POST'});
-      toast(`Кэш очищен. Всего товаров в БД: ${r?.garments_total ?? '—'}`);
-      await refreshAll();
-    } finally {
-      if(btn) btn.disabled = false;
-    }
+  function isV31(metrics){
+    return metrics && typeof metrics === 'object' && metrics.schema_version === 'v3.1' && metrics.v31 && typeof metrics.v31 === 'object';
   }
 
-  function renderTable(container, rows){
-    if(!container) return;
-    if(!rows || !rows.length){
-      container.innerHTML = `<div class="p-4 text-sm text-gray-500">Пусто</div>`;
+  function computeReadyFromMetrics(metrics){
+    if(!isV31(metrics)) return { level: 'LEGACY', reason: 'не v3.1' };
+    const v31 = metrics.v31;
+    const prod = v31.product || {};
+    const gt = (prod.garment_type || '').toLowerCase();
+    const sizes = Array.isArray(prod.available_sizes) ? prod.available_sizes : [];
+    const sm = (v31.size_matrix && typeof v31.size_matrix === 'object') ? v31.size_matrix : {};
+    const matrixCount = Object.keys(sm).length;
+
+    if(!prod.sku || !gt || !sizes.length) return { level: 'NOT_READY', reason: 'нет sku/type/sizes' };
+
+    const model = v31.model || {};
+    const body = model.body || {};
+    const gom = (v31.garment_on_model && v31.garment_on_model.measurements) ? v31.garment_on_model.measurements : {};
+    if(!model.size_worn) return { level: 'NOT_READY', reason: 'нет размера на модели' };
+    if(!body.chest_circ) return { level: 'NOT_READY', reason: 'нет груди модели' };
+
+    if(gt === 'tshirt'){
+      if(!gom.chest) return { level: 'NOT_READY', reason: 'нет chest вещи на модели' };
+      if(matrixCount >= 2) return { level: 'READY', reason: `матрица ${matrixCount}` };
+      if(matrixCount >= 1) return { level: 'PARTIAL', reason: `матрица ${matrixCount}` };
+      return { level: 'NOT_READY', reason: 'матрица пустая' };
+    }
+
+    if(gt === 'trousers'){
+      if(!gom.waist_bottom || !gom.hips || !gom.inseam) return { level: 'NOT_READY', reason: 'нет пояс/бедра/inseam на модели' };
+      if(matrixCount >= 2) return { level: 'READY', reason: `матрица ${matrixCount}` };
+      if(matrixCount >= 1) return { level: 'PARTIAL', reason: `матрица ${matrixCount}` };
+      return { level: 'NOT_READY', reason: 'матрица пустая' };
+    }
+
+    return { level: 'PARTIAL', reason: `матрица ${matrixCount}` };
+  }
+
+  function badge(text, cls){
+    return `<span class="px-3 py-1.5 rounded-xl border text-xs font-black ${cls}">${esc(text)}</span>`;
+  }
+
+  function levelBadge(level, reason){
+    if(level === 'READY') return badge(`READY • ${reason}`, 'bg-green-50 text-green-700 border-green-200');
+    if(level === 'PARTIAL') return badge(`PARTIAL • ${reason}`, 'bg-amber-50 text-amber-800 border-amber-200');
+    if(level === 'NOT_READY') return badge(`NOT READY • ${reason}`, 'bg-red-50 text-red-700 border-red-200');
+    return badge(`LEGACY • ${reason}`, 'bg-gray-50 text-gray-700 border-gray-200');
+  }
+
+  let allGarments = [];
+
+  function renderStats(s){
+    const box = $('stats');
+    if(!box) return;
+    box.innerHTML = [
+      badge(`Товары: ${s.garments ?? 0}`, 'bg-gray-50 text-gray-900 border-gray-200'),
+      badge(`Профили: ${s.profiles ?? 0}`, 'bg-gray-50 text-gray-900 border-gray-200'),
+      badge(`Фидбек: ${s.feedback ?? 0}`, 'bg-gray-50 text-gray-900 border-gray-200'),
+    ].join('');
+  }
+
+  function renderList(){
+    const list = $('list');
+    const empty = $('empty');
+    const q = (($('q')?.value || '').trim().toLowerCase());
+
+    const items = allGarments.filter(g => {
+      if(!q) return true;
+      const sku = String(g.sku || '').toLowerCase();
+      const name = String(g.name || '').toLowerCase();
+      return sku.includes(q) || name.includes(q);
+    });
+
+    list.innerHTML = '';
+    if(!items.length){
+      empty.classList.remove('hidden');
       return;
     }
-    const cols = Object.keys(rows[0]);
-    container.innerHTML = `
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-600">
-          <tr>${cols.map(c=>`<th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">${esc(c)}</th>`).join('')}</tr>
-        </thead>
-        <tbody>
-          ${rows.map(r=>`<tr class="border-t border-gray-100 hover:bg-gray-50">${cols.map(c=>`<td class="px-3 py-2 align-top whitespace-nowrap max-w-[280px] overflow-hidden text-ellipsis">${esc(typeof r[c]==='object'?JSON.stringify(r[c]):r[c])}</td>`).join('')}</tr>`).join('')}
-        </tbody>
-      </table>
-    `;
-  }
+    empty.classList.add('hidden');
 
-  function renderGarmentsTable(container, items){
-    if(!container) return;
-    if(!items || !items.length){
-      container.innerHTML = `<div class="p-4 text-sm text-gray-500">Пусто</div>`;
-      return;
-    }
+    for(const g of items){
+      const metrics = g.metrics || {};
+      const ready = computeReadyFromMetrics(metrics);
+      const v31 = isV31(metrics) ? metrics.v31 : null;
+      const prod = v31?.product || {};
+      const gt = prod?.garment_type || '—';
+      const sizes = Array.isArray(prod.available_sizes) ? prod.available_sizes : [];
+      const matrixCount = v31?.size_matrix ? Object.keys(v31.size_matrix).length : 0;
 
-    container.innerHTML = `
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-600">
-          <tr>
-            <th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">SKU</th>
-            <th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">Название</th>
-            <th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">Платформа</th>
-            <th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">Цена</th>
-            <th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">В наличии</th>
-            <th class="text-left font-extrabold px-3 py-2 whitespace-nowrap">Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${items.map(it => {
-            const sku = it?.sku || '';
-            const name = it?.name || '';
-            const platform = it?.platform || '';
-            const price = (it?.price ?? '');
-            const inStock = !!it?.in_stock;
-            const builderUrl = `/builder?sku=${encodeURIComponent(sku)}`;
+      const card = document.createElement('div');
+      card.className = 'p-4 rounded-2xl border border-gray-200 bg-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3';
 
-            return `
-              <tr class="border-t border-gray-100 hover:bg-gray-50">
-                <td class="px-3 py-2 align-top whitespace-nowrap font-black">${esc(sku)}</td>
-                <td class="px-3 py-2 align-top max-w-[420px] overflow-hidden text-ellipsis">${esc(name)}</td>
-                <td class="px-3 py-2 align-top whitespace-nowrap">${esc(platform)}</td>
-                <td class="px-3 py-2 align-top whitespace-nowrap">${esc(price)}</td>
-                <td class="px-3 py-2 align-top whitespace-nowrap">${inStock ? '✅' : '—'}</td>
-                <td class="px-3 py-2 align-top whitespace-nowrap">
-                  <a href="${builderUrl}" class="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition">
-                    ✎ Builder
-                  </a>
-                  <button data-del="${esc(sku)}" class="ml-2 inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-extrabold text-[11px] uppercase tracking-widest hover:bg-rose-50 transition">
-                    🗑 Удалить
-                  </button>
-                </td>
-              </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
-
-    container.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button[data-del]');
-      if(!btn) return;
-      const sku = btn.getAttribute('data-del') || '';
-      if(!sku) return;
-
-      if(!confirm(`Удалить товар ${sku} из базы?`)) return;
-
-      btn.disabled = true;
-      try{
-        await api(API.builderDelete(sku), {method:'DELETE'});
-        toast(`Удалено: ${sku}`);
-        await loadGarments(qs('#garment-search')?.value || '');
-      }catch(err){
-        toast(err.message);
-      }finally{
-        btn.disabled = false;
-      }
-    }, { once: true });
-  }
-
-  async function loadOverview(){
-    const data = await api(API.stats);
-    const c = data?.counts || {};
-    const overview = qs('#overview');
-    if(overview){
-      const items = [
-        ['Товары', c.garments ?? 0],
-        ['Профили', c.profiles ?? 0],
-      ];
-      overview.innerHTML = items.map(([k,v])=>`
-        <div class="p-4 rounded-2xl border border-gray-100 bg-gray-50 shadow-sm">
-          <div class="text-[11px] uppercase tracking-widest text-gray-500 font-extrabold">${esc(k)}</div>
-          <div class="mt-1 text-2xl font-black">${esc(v)}</div>
+      card.innerHTML = `
+        <div class="min-w-0">
+          <div class="font-black text-lg truncate">${esc(g.name || g.sku || '—')}</div>
+          <div class="text-[10px] text-gray-400 mt-1 uppercase tracking-widest font-extrabold">
+            SKU ${esc(g.sku)} • ${esc(gt)} • sizes ${sizes.length} • matrix ${matrixCount}
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            ${levelBadge(ready.level, ready.reason)}
+            ${isV31(metrics) ? badge('v3.1', 'bg-indigo-50 text-indigo-700 border-indigo-200') : badge('legacy', 'bg-gray-50 text-gray-700 border-gray-200')}
+          </div>
         </div>
-      `).join('');
+
+        <div class="flex gap-2 flex-wrap justify-end">
+          <a href="/builder?sku=${encodeURIComponent(g.sku || '')}" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-xs font-black hover:bg-indigo-700">Builder</a>
+          <a href="/?profile=1" class="hidden"></a>
+          <button data-del="1" class="px-3 py-2 rounded-xl border border-red-200 bg-white text-xs font-bold text-red-600 hover:bg-red-50">Удалить</button>
+        </div>
+      `;
+
+      card.querySelector('button[data-del]').addEventListener('click', async () => {
+        const sku = g.sku;
+        if(!sku) return;
+        if(!confirm(`Удалить товар ${sku}?`)) return;
+        try {
+          await api(API.del(sku), { method: 'DELETE' });
+          toast('Удалено');
+          await loadAll();
+        } catch(e){
+          toast('Ошибка удаления', false);
+        }
+      });
+
+      list.appendChild(card);
     }
   }
 
-  async function loadGarments(q=''){
-    const box = qs('#garments');
-    if(box) box.innerHTML = `<div class="p-4 text-sm text-gray-500">Загрузка...</div>`;
-    const data = await api(API.garments(q, 50));
-    renderGarmentsTable(box, data?.items || []);
+  async function loadAll(){
+    const [s, gs] = await Promise.all([
+      api(API.stats),
+      api(API.garments),
+    ]);
+    renderStats(s);
+    allGarments = Array.isArray(gs) ? gs : [];
+    renderList();
   }
 
-  async function loadProfiles(){
-    const box = qs('#profiles');
-    if(box) box.innerHTML = `<div class="p-4 text-sm text-gray-500">Загрузка...</div>`;
-    const data = await api(API.profiles);
-    renderTable(box, data || []);
+  function bind(){
+    $('btn-refresh')?.addEventListener('click', ()=> loadAll().catch(()=> toast('Ошибка обновления', false)));
+    $('btn-clear')?.addEventListener('click', ()=> { $('q').value=''; renderList(); });
+    $('q')?.addEventListener('input', ()=> renderList());
   }
 
-  async function refreshAll(){
-    await Promise.allSettled([loadOverview(), loadProfiles()]);
-    await loadGarments(qs('#garment-search')?.value || '');
-  }
-
-  qs('#btn-refresh')?.addEventListener('click', ()=> refreshAll().catch(e=>toast(e.message)));
-  qs('#btn-update-db')?.addEventListener('click', ()=> updateDb().catch(e=>toast(e.message)));
-  qs('#btn-garment-search')?.addEventListener('click', ()=> loadGarments(qs('#garment-search')?.value || '').catch(e=>toast(e.message)));
-  qs('#garment-search')?.addEventListener('keydown', (e)=> {
-    if(e.key==='Enter'){
-      e.preventDefault();
-      loadGarments(qs('#garment-search')?.value || '').catch(err=>toast(err.message));
-    }
+  window.addEventListener('DOMContentLoaded', async () => {
+    bind();
+    try { await loadAll(); }
+    catch(e){ toast('Ошибка загрузки', false); }
   });
-
-  refreshAll().catch(e=>toast(e.message));
 })();

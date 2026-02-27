@@ -164,6 +164,69 @@ def save_garment_metrics(garment_id: int, payload: Dict[str, Any] = Body(...), d
     return {"ok": True}
 
 
+
+
+# -----------------------------
+# API: admin (builder/admin UI compatibility)
+# Frontend expects:
+#   GET    /api/admin/builder/list
+#   GET    /api/admin/builder/get?sku=...
+#   POST   /api/admin/builder/upsert
+#   DELETE /api/admin/builder/delete?sku=...
+#   GET    /api/admin/garments
+#   GET    /api/admin/stats
+# -----------------------------
+
+@app.get("/api/admin/builder/list")
+def admin_builder_list(db: Session = Depends(database.get_db)):
+    # Same as /api/garments
+    return list_garments(db)
+
+@app.get("/api/admin/garments")
+def admin_garments(db: Session = Depends(database.get_db)):
+    # Admin page expects an array of garments with metrics
+    return list_garments(db)
+
+@app.get("/api/admin/builder/get")
+def admin_builder_get(sku: str = Query(...), db: Session = Depends(database.get_db)):
+    sku = (sku or "").strip()
+    if not sku:
+        raise HTTPException(status_code=400, detail="sku обязателен")
+    g = db.query(models.Garment).filter(models.Garment.sku == sku).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {c.name: getattr(g, c.name) for c in g.__table__.columns}
+
+@app.post("/api/admin/builder/upsert")
+def admin_builder_upsert(payload: Dict[str, Any] = Body(...), db: Session = Depends(database.get_db)):
+    # Builder sends full garment payload: {sku,name,platform,price,image_url,...,metrics:{schema_version:'v3.1',v31:{...}}}
+    return upsert_garment(payload, db)
+
+@app.delete("/api/admin/builder/delete")
+def admin_builder_delete(sku: str = Query(...), db: Session = Depends(database.get_db)):
+    sku = (sku or "").strip()
+    if not sku:
+        raise HTTPException(status_code=400, detail="sku обязателен")
+    g = db.query(models.Garment).filter(models.Garment.sku == sku).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Not found")
+    db.delete(g)
+    db.commit()
+
+    global _cache_items, _cache_ts
+    _cache_items = None
+    _cache_ts = 0.0
+
+    return {"ok": True}
+
+@app.get("/api/admin/stats")
+def admin_stats(db: Session = Depends(database.get_db)):
+    garments = db.query(models.Garment).count()
+    profiles = db.query(models.BodyProfile).count()
+    feedback = db.query(models.Feedback).count()
+    return {"garments": garments, "profiles": profiles, "feedback": feedback}
+
+
 # -----------------------------
 # API: profiles
 # -----------------------------
@@ -280,7 +343,7 @@ def calculate(req: models.CalculateRequest, db: Session = Depends(database.get_d
             "fit": fit,
         })
 
-    return {"ok": True, "results": results}
+    return {"ok": True, "items": results, "results": results}
 
 
 # -----------------------------
